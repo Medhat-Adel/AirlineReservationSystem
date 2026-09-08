@@ -6,6 +6,7 @@
 
 #include "models/Passenger.h"
 #include "models/Flight.h"
+#include "models/Payment.h"
 
 enum class ReservationStatus
 {
@@ -27,6 +28,7 @@ private:
 
     double totalPrice;
     ReservationStatus status;
+    PaymentMethod paymentMethod;
 
 public:
     Reservation(
@@ -36,6 +38,7 @@ public:
         const std::string& seatNumber,
         const std::string& bookingDate,
         double totalPrice,
+        PaymentMethod paymentMethod,
         ReservationStatus status = ReservationStatus::Confirmed
     );
 
@@ -49,6 +52,8 @@ public:
 
     double getTotalPrice() const;
     ReservationStatus getStatus() const;
+
+    PaymentMethod getPaymentMethod() const;
 
     void setStatus(ReservationStatus status);
 

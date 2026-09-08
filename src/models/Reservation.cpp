@@ -9,6 +9,7 @@ Reservation::Reservation(
     const std::string& seatNumber,
     const std::string& bookingDate,
     double totalPrice,
+    PaymentMethod paymentMethod,
     ReservationStatus status
 )
     : id(id),
@@ -17,7 +18,8 @@ Reservation::Reservation(
       seatNumber(seatNumber),
       bookingDate(bookingDate),
       totalPrice(totalPrice),
-      status(status)
+      status(status),
+      paymentMethod(paymentMethod)
 {
     if (id <= 0)
     {
@@ -90,6 +92,11 @@ const std::string& Reservation::getBookingDate() const
 double Reservation::getTotalPrice() const
 {
     return totalPrice;
+}
+
+PaymentMethod Reservation::getPaymentMethod() const
+{
+    return paymentMethod;
 }
 
 ReservationStatus Reservation::getStatus() const

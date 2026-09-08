@@ -1,193 +1,156 @@
 #include <iostream>
 #include <memory>
+#include <vector>
 
-#include "models/Passenger.h"
 #include "models/Aircraft.h"
 #include "models/Flight.h"
-#include "services/PaymentService.h"
-#include "services/BookingService.h"
+#include "services/FlightSearchService.h"
+
+void printFlights(
+    const std::vector<std::shared_ptr<Flight>>& flights
+)
+{
+    for (const auto& flight : flights)
+    {
+        std::cout
+            << flight->getFlightNumber()
+            << " | "
+            << flight->getOrigin()
+            << " -> "
+            << flight->getDestination()
+            << " | "
+            << flight->getDepartureTime()
+            << " | Price: "
+            << flight->getPrice()
+            << '\n';
+    }
+}
 
 int main()
 {
     std::cout << "========================================\n";
-    std::cout << "      MODIFY RESERVATION TEST\n";
+    std::cout << "       FLIGHT SEARCH SERVICE TEST\n";
     std::cout << "========================================\n\n";
 
-    try
+    auto aircraft = std::make_shared<Aircraft>(
+        1,
+        "SU-ABC",
+        "Airbus",
+        "A320",
+        180
+    );
+
+    auto flight1 = std::make_shared<Flight>(
+        "MS123",
+        "Cairo",
+        "Dubai",
+        "2026-09-10 10:00",
+        "2026-09-10 13:00",
+        5000,
+        aircraft,
+        3
+    );
+
+    auto flight2 = std::make_shared<Flight>(
+        "MS456",
+        "Cairo",
+        "Dubai",
+        "2026-09-10 15:00",
+        "2026-09-10 18:00",
+        7000,
+        aircraft,
+        3
+    );
+
+    auto flight3 = std::make_shared<Flight>(
+        "MS789",
+        "Cairo",
+        "Riyadh",
+        "2026-09-11 09:00",
+        "2026-09-11 12:00",
+        4500,
+        aircraft,
+        3
+    );
+
+    std::vector<std::shared_ptr<Flight>> flights =
     {
-        // Create passenger.
-        auto passenger = std::make_shared<Passenger>(
-            1,
-            "medhat@1001",
-            "hashed_password",
-            "Medhat Adel",
-            "medhat@example.com",
-            "01000000000",
-            "A12345678"
+        flight1,
+        flight2,
+        flight3
+    };
+
+    FlightSearchService searchService;
+
+    // Test 1: Search by destination
+    std::cout << "[1] Searching flights to Dubai...\n";
+
+    auto dubaiFlights =
+        searchService.searchByDestination(
+            flights,
+            "Dubai"
         );
 
-        // Create aircraft.
-        auto aircraft = std::make_shared<Aircraft>(
-            1,
-            "SU-ABC",
-            "Airbus",
-            "A320",
-            180
+    std::cout << "    Results: "
+              << dubaiFlights.size()
+              << "\n\n";
+
+    printFlights(dubaiFlights);
+
+    // Test 2: Search by date
+    std::cout << "\n[2] Searching flights on 2026-09-10...\n";
+
+    auto dateFlights =
+        searchService.searchByDate(
+            flights,
+            "2026-09-10"
         );
 
-        // Create flight.
-        auto flight = std::make_shared<Flight>(
-            "MS123",
-            "Cairo",
+    std::cout << "    Results: "
+              << dateFlights.size()
+              << "\n\n";
+
+    printFlights(dateFlights);
+
+    // Test 3: Search by maximum price
+    std::cout << "\n[3] Searching flights under 6000...\n";
+
+    auto cheapFlights =
+        searchService.searchByMaximumPrice(
+            flights,
+            6000
+        );
+
+    std::cout << "    Results: "
+              << cheapFlights.size()
+              << "\n\n";
+
+    printFlights(cheapFlights);
+
+    // Test 4: Combined search
+    std::cout
+        << "\n[4] Combined search:\n"
+        << "    Destination: Dubai\n"
+        << "    Date: 2026-09-10\n"
+        << "    Maximum price: 6000\n";
+
+    auto combinedResults =
+        searchService.search(
+            flights,
             "Dubai",
-            "2026-09-10 10:00",
-            "2026-09-10 13:00",
-            5000.0,
-            aircraft,
-            3
+            "2026-09-10",
+            6000
         );
 
-        PaymentService paymentService;
+    std::cout << "    Results: "
+              << combinedResults.size()
+              << "\n\n";
 
-        BookingService bookingService(
-            paymentService
-        );
+    printFlights(combinedResults);
 
-        // ========================================
-        // STEP 1: CREATE RESERVATION
-        // ========================================
-
-        std::cout << "[1] Creating reservation...\n";
-
-        auto reservation =
-            bookingService.createReservation(
-                passenger,
-                flight,
-                "12A",
-                "2026-09-07 18:00",
-                PaymentMethod::Card
-            );
-
-        std::cout
-            << "    Reservation ID: "
-            << reservation->getId()
-            << "\n";
-
-        std::cout
-            << "    Initial seat: "
-            << reservation->getSeatNumber()
-            << "\n";
-
-        // ========================================
-        // STEP 2: CHECK INITIAL SEATS
-        // ========================================
-
-        std::cout
-            << "\n[2] Checking initial seats...\n";
-
-        std::cout
-            << "    Seat 12A available: "
-            << (flight->isSeatAvailable("12A")
-                ? "Yes"
-                : "No")
-            << "\n";
-
-        std::cout
-            << "    Seat 12B available: "
-            << (flight->isSeatAvailable("12B")
-                ? "Yes"
-                : "No")
-            << "\n";
-
-        // ========================================
-        // STEP 3: MODIFY RESERVATION
-        // ========================================
-
-        std::cout
-            << "\n[3] Modifying reservation...\n";
-
-        if (bookingService.modifyReservation(
-                reservation->getId(),
-                "12B"))
-        {
-            std::cout
-                << "    Reservation modified successfully!\n";
-        }
-        else
-        {
-            std::cout
-                << "    Failed to modify reservation.\n";
-        }
-
-        // ========================================
-        // STEP 4: CHECK NEW RESERVATION
-        // ========================================
-
-        std::cout
-            << "\n[4] Checking reservation...\n";
-
-        std::cout
-            << "    Current seat: "
-            << reservation->getSeatNumber()
-            << "\n";
-
-        // ========================================
-        // STEP 5: CHECK SEATS AFTER MODIFICATION
-        // ========================================
-
-        std::cout
-            << "\n[5] Checking seats after modification...\n";
-
-        std::cout
-            << "    Seat 12A available: "
-            << (flight->isSeatAvailable("12A")
-                ? "Yes"
-                : "No")
-            << "\n";
-
-        std::cout
-            << "    Seat 12B available: "
-            << (flight->isSeatAvailable("12B")
-                ? "Yes"
-                : "No")
-            << "\n";
-
-        // ========================================
-        // STEP 6: CHECK PAYMENT
-        // ========================================
-
-        std::cout
-            << "\n[6] Checking payment...\n";
-
-        auto payment =
-            paymentService.getPaymentByReservationId(
-                reservation->getId()
-            );
-
-        if (payment != nullptr)
-        {
-            std::cout
-                << "    Payment ID: "
-                << payment->getId()
-                << "\n";
-
-            std::cout
-                << "    Payment status: ";
-
-            if (payment->getStatus() ==
-                PaymentStatus::Completed)
-            {
-                std::cout << "Completed\n";
-            }
-        }
-    }
-    catch (const std::exception& exception)
-    {
-        std::cout
-            << "\nERROR: "
-            << exception.what()
-            << "\n";
-    }
+    std::cout << "\n========================================\n";
+    std::cout << "      FLIGHT SEARCH TEST COMPLETED\n";
+    std::cout << "========================================\n";
 
     return 0;
 }

@@ -3,9 +3,11 @@
 #include <stdexcept>
 
 BookingService::BookingService(
-    PaymentService& paymentService
+    PaymentService& paymentService,
+    LoyaltyService& loyaltyService
 )
     : paymentService(paymentService),
+      loyaltyService(loyaltyService),
       nextReservationId(1)
 {
 }
@@ -54,11 +56,25 @@ BookingService::createReservation(
         );
     }
 
+    // If the selected seat is unavailable,
+    // add the reservation to the waitlist.
     if (!flight->isSeatAvailable(seatNumber))
     {
-        throw std::runtime_error(
-            "Selected seat is not available."
+        auto reservation = std::make_shared<Reservation>(
+            nextReservationId++,
+            passenger,
+            flight,
+            seatNumber,
+            bookingDate,
+            flight->getPrice(),
+            paymentMethod,
+            ReservationStatus::Waitlisted
         );
+
+        reservations.push_back(reservation);
+        waitlist.push(reservation);
+
+        return reservation;
     }
 
     // Reserve the seat first.
@@ -79,6 +95,7 @@ BookingService::createReservation(
             seatNumber,
             bookingDate,
             flight->getPrice(),
+            paymentMethod,
             ReservationStatus::Confirmed
         );
 
@@ -90,12 +107,21 @@ BookingService::createReservation(
             bookingDate
         );
 
-        if (payment == nullptr)
+        // Payment must be completed successfully.
+        if (payment == nullptr ||
+            payment->getStatus() != PaymentStatus::Completed)
         {
             throw std::runtime_error(
                 "Payment processing failed."
             );
         }
+
+        // Award loyalty points only after
+        // successful payment.
+        loyaltyService.awardPoints(
+            passenger,
+            reservation->getTotalPrice()
+        );
 
         reservations.push_back(reservation);
 
@@ -103,8 +129,8 @@ BookingService::createReservation(
     }
     catch (...)
     {
-        // Payment/reservation creation failed.
-        // Release the seat so it does not remain occupied.
+        // Reservation creation or payment processing
+        // failed, so release the reserved seat.
         flight->releaseSeat(seatNumber);
 
         throw;
@@ -227,6 +253,8 @@ bool BookingService::cancelReservation(
         flight->releaseSeat(
             reservation->getSeatNumber()
         );
+
+        processWaitlist(flight);
     }
 
     // Mark reservation as cancelled.
@@ -257,4 +285,116 @@ const std::vector<std::shared_ptr<Reservation>>&
 BookingService::getAllReservations() const
 {
     return reservations;
+}
+
+const std::queue<std::shared_ptr<Reservation>>&
+BookingService::getWaitlist() const
+{
+    return waitlist;
+}
+
+void BookingService::processWaitlist(
+    const std::shared_ptr<Flight>& flight
+)
+{
+    if (flight == nullptr)
+    {
+        return;
+    }
+
+    if (waitlist.empty())
+    {
+        return;
+    }
+
+    std::queue<std::shared_ptr<Reservation>> remainingWaitlist;
+
+    bool promoted = false;
+
+    while (!waitlist.empty())
+    {
+        auto reservation = waitlist.front();
+        waitlist.pop();
+
+        if (reservation == nullptr)
+        {
+            continue;
+        }
+
+        // Keep reservations for other flights
+        // in the waitlist.
+        if (reservation->getFlight() != flight)
+        {
+            remainingWaitlist.push(reservation);
+            continue;
+        }
+
+        // Only promote the first eligible reservation.
+        if (promoted)
+        {
+            remainingWaitlist.push(reservation);
+            continue;
+        }
+
+        const std::string seatNumber =
+            reservation->getSeatNumber();
+
+        // The requested seat must be available.
+        if (!flight->isSeatAvailable(seatNumber))
+        {
+            remainingWaitlist.push(reservation);
+            continue;
+        }
+
+        // Reserve the seat.
+        if (!flight->reserveSeat(seatNumber))
+        {
+            remainingWaitlist.push(reservation);
+            continue;
+        }
+
+        try
+        {
+            // Process payment now that the seat
+            // has become available.
+            auto payment = paymentService.processPayment(
+                reservation->getId(),
+                reservation->getTotalPrice(),
+                reservation->getPaymentMethod(),
+                reservation->getBookingDate()
+            );
+
+            if (payment == nullptr ||
+                payment->getStatus() != PaymentStatus::Completed)
+            {
+                throw std::runtime_error(
+                    "Payment processing failed."
+                );
+            }
+
+            // Award loyalty points only after
+            // successful payment.
+            loyaltyService.awardPoints(
+                reservation->getPassenger(),
+                reservation->getTotalPrice()
+            );
+
+            // Promote reservation.
+            reservation->setStatus(
+                ReservationStatus::Confirmed
+            );
+
+            promoted = true;
+        }
+        catch (...)
+        {
+            // Payment failed, so release the seat
+            // and keep the reservation waitlisted.
+            flight->releaseSeat(seatNumber);
+
+            remainingWaitlist.push(reservation);
+        }
+    }
+
+    waitlist = std::move(remainingWaitlist);
 }

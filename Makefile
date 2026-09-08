@@ -16,7 +16,9 @@ SOURCES = main.cpp \
 	src/models/Reservation.cpp \
 	src/services/BookingService.cpp \
 	src/models/Payment.cpp \
-	src/services/PaymentService.cpp
+	src/services/PaymentService.cpp \
+	src/services/LoyaltyService.cpp \
+	src/services/FlightSearchService.cpp
 
 build:
 	$(CXX) $(CXXFLAGS) $(SOURCES) -o $(TARGET)

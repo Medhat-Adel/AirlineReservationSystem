@@ -28,6 +28,7 @@ add_executable(AirlineReservationSystem
     src/services/BookingService.cpp
     src/models/Payment.cpp
     src/services/PaymentService.cpp
+    src/services/FlightSearchService.cpp
 )
 
 target_include_directories(AirlineReservationSystem
