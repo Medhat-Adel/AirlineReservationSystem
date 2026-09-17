@@ -1,12 +1,17 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <utility>
 
 #include "models/User.h"
 #include "repositories/UserRepository.h"
-#include "services/AuthenticationService.h"
-#include "services/UserManagementService.h"
 #include "ui/ConsoleUI.h"
+#include "services/UserManagementService.h"
+#include "services/AuthenticationService.h"
+#include "services/MaintenanceService.h"
+#include "services/PaymentService.h"
+#include "services/LoyaltyService.h"
+#include "services/BookingService.h"
 
 int main()
 {
@@ -22,13 +27,25 @@ int main()
 
         AuthenticationService authenticationService(users);
 
-        ConsoleUI consoleUI(
-            users,
-            authenticationService,
-            userManagementService
+        auto maintenanceService =
+            std::make_unique<MaintenanceService>();
+
+        PaymentService paymentService;
+        LoyaltyService loyaltyService;
+
+        BookingService bookingService(
+            paymentService,
+            loyaltyService
         );
 
-        consoleUI.run();
+    ConsoleUI consoleUI(
+        users,
+        authenticationService,
+        userManagementService,
+        std::move(maintenanceService),
+        bookingService
+    );
+            consoleUI.run();
     }
     catch (const std::exception& e)
     {

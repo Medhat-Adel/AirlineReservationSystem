@@ -9,9 +9,12 @@
 #include "models/Flight.h"
 #include "models/Aircraft.h"
 #include "models/CrewMember.h"
+#include "models/Maintenance.h"
+#include "services/MaintenanceService.h"
 
 class AuthenticationService;
 class UserManagementService;
+class BookingService;
 
 class ConsoleUI
 {
@@ -20,18 +23,21 @@ private:
 
     AuthenticationService& authenticationService;
     UserManagementService& userManagementService;
+    BookingService& bookingService;
 
     std::vector<std::shared_ptr<Aircraft>> aircraft;
     std::vector<std::shared_ptr<CrewMember>> crewMembers;
     std::vector<std::shared_ptr<Flight>> flights;
-
+    std::unique_ptr<MaintenanceService> maintenanceService;
     std::shared_ptr<User> currentUser;
 
 public:
     ConsoleUI(
         std::vector<std::shared_ptr<User>>& users,
         AuthenticationService& authenticationService,
-        UserManagementService& userManagementService
+        UserManagementService& userManagementService,
+        std::unique_ptr<MaintenanceService> maintenanceService,
+        BookingService& bookingService
     );
 
     void run();
@@ -64,7 +70,11 @@ private:
     void updateFlight();
     void deleteFlight();
     void searchFlights() const;
+    void createReservation();
+    void modifyReservation();
     void changeFlightStatus();
+    void cancelReservation();
+    void processPayment();
 
     // ========================================================
     // AIRCRAFT MANAGEMENT
@@ -89,6 +99,27 @@ private:
     void changeCrewStatus();
     void assignCrewToFlight();
     void removeCrewFromFlight();
+
+    // ============================================================
+    // MAINTENANCE MANAGEMENT
+    // ============================================================
+
+    void manageMaintenance();
+    void listMaintenanceRecords() const;
+    void scheduleMaintenance();
+    void addReplacedPart();
+    void completeMaintenance();
+
+    // ============================================================
+    // REPORTS & ANALYTICS
+    // ============================================================
+
+    void showReportsMenu();
+    void generateFlightPerformanceReport();
+    void generateReservationStatisticsReport();
+    void generateFinancialSummaryReport();
+    void generateAircraftUtilizationReport();
+    void generateMaintenanceReport();
 
     // ========================================================
     // GENERAL

@@ -287,6 +287,16 @@ BookingService::getAllReservations() const
     return reservations;
 }
 
+std::shared_ptr<Payment>
+BookingService::getPaymentByReservationId(
+    int reservationId
+) const
+{
+    return paymentService.getPaymentByReservationId(
+        reservationId
+    );
+}
+
 const std::queue<std::shared_ptr<Reservation>>&
 BookingService::getWaitlist() const
 {
@@ -395,6 +405,7 @@ void BookingService::processWaitlist(
             remainingWaitlist.push(reservation);
         }
     }
+    
 
     waitlist = std::move(remainingWaitlist);
 }

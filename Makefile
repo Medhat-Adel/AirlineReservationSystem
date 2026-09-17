@@ -37,7 +37,7 @@ build:
 	$(CXX) $(CXXFLAGS) main.cpp $(CORE_SOURCES) -o $(TARGET)
 
 
-run: build
+run: 
 	./$(TARGET)
 
 

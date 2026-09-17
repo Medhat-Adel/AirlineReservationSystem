@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 #include "models/Administrator.h"
 #include "models/BookingAgent.h"
@@ -17,11 +18,18 @@
 #include "repositories/FlightRepository.h"
 #include "repositories/AircraftRepository.h"
 #include "repositories/CrewRepository.h"
+#include "repositories/MaintenanceRepository.h"
+#include "repositories/ReservationRepository.h"
+#include "repositories/PaymentRepository.h"
+
 
 #include "services/AuthenticationService.h"
 #include "services/UserManagementService.h"
 #include "services/FlightSearchService.h"
 #include "services/FlightOperationsService.h"
+#include "services/MaintenanceService.h"
+#include "services/ReportService.h"
+#include "services/BookingService.h"
 
 // ============================================================
 // CONSTRUCTOR
@@ -30,12 +38,16 @@
 ConsoleUI::ConsoleUI(
     std::vector<std::shared_ptr<User>>& users,
     AuthenticationService& authenticationService,
-    UserManagementService& userManagementService
+    UserManagementService& userManagementService,
+    std::unique_ptr<MaintenanceService> maintenanceService,
+    BookingService& bookingService
 )
-    : users(users),
-      authenticationService(authenticationService),
-      userManagementService(userManagementService),
-      currentUser(nullptr)
+: users(users),
+  authenticationService(authenticationService),
+  userManagementService(userManagementService),
+  bookingService(bookingService),
+  maintenanceService(std::move(maintenanceService)),
+  currentUser(nullptr)
 {
     AircraftRepository aircraftRepository;
     CrewRepository crewRepository;
@@ -284,17 +296,11 @@ void ConsoleUI::showAdministratorMenu()
                 break;
 
             case 5:
-                std::cout
-                    << "\nMaintenance Management will be implemented next.\n";
-
-                pause();
+                manageMaintenance();
                 break;
 
             case 6:
-                std::cout
-                    << "\nReports & Analytics will be implemented next.\n";
-
-                pause();
+                showReportsMenu();
                 break;
 
             case 7:
@@ -365,6 +371,27 @@ void ConsoleUI::showBookingAgentMenu()
 
         switch (choice)
         {
+            
+            case 1:
+                searchFlights();
+                break;
+
+            case 2:
+                createReservation();
+                break;
+
+            case 3:
+                modifyReservation();
+                break;
+
+            case 4:
+                cancelReservation();
+                break;    
+
+            case 6:
+                processPayment();
+                break;
+                
             case 8:
                 logout();
                 break;
@@ -1940,18 +1967,169 @@ void ConsoleUI::searchFlights() const
 
     std::cout
         << "=====================================\n"
-        << "            Search Flights\n"
-        << "=====================================\n\n"
-        << "1. Search by Destination\n"
-        << "2. Search by Date\n"
-        << "3. Search by Maximum Price\n"
-        << "4. Combined Search\n"
-        << "5. Back\n\n"
-        << "Choose an option: ";
+        << "           Search Flights\n"
+        << "=====================================\n\n";
 
-    int choice;
+    std::string destination;
+    std::string date;
+    double maximumPrice;
 
-    if (!(std::cin >> choice))
+    std::cout << "Destination: ";
+    std::getline(std::cin, destination);
+
+    std::cout << "Departure Date (YYYY-MM-DD): ";
+    std::getline(std::cin, date);
+
+    std::cout << "Maximum Price: ";
+
+    if (!(std::cin >> maximumPrice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid price.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    try
+    {
+        FlightSearchService searchService;
+
+        auto results =
+            searchService.search(
+                flights,
+                destination,
+                date,
+                maximumPrice
+            );
+
+        std::cout
+            << "\n=====================================\n"
+            << "           Search Results\n"
+            << "=====================================\n\n";
+
+        if (results.empty())
+        {
+            std::cout
+                << "No flights found matching "
+                << "your search criteria.\n";
+
+            pause();
+            return;
+        }
+
+        for (const auto& flight : results)
+        {
+            if (flight == nullptr)
+            {
+                continue;
+            }
+
+            std::cout
+                << "-------------------------------------\n"
+                << "Flight Number : "
+                << flight->getFlightNumber()
+                << "\n"
+                << "Origin        : "
+                << flight->getOrigin()
+                << "\n"
+                << "Destination   : "
+                << flight->getDestination()
+                << "\n"
+                << "Departure     : "
+                << flight->getDepartureTime()
+                << "\n"
+                << "Arrival       : "
+                << flight->getArrivalTime()
+                << "\n"
+                << "Price         : "
+                << flight->getPrice()
+                << "\n"
+                << "Status        : "
+                << flightStatusToString(
+                    flight->getStatus()
+                )
+                << "\n"
+                << "-------------------------------------\n";
+        }
+    }
+    catch (const std::exception& exception)
+    {
+        std::cout
+            << "\nSearch failed: "
+            << exception.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::createReservation()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "         Create Reservation\n"
+        << "=====================================\n\n";
+
+    // ========================================================
+    // 1. Select Passenger
+    // ========================================================
+
+    std::vector<std::shared_ptr<Passenger>> passengers;
+
+    for (const auto& user : users)
+    {
+        auto passenger =
+            std::dynamic_pointer_cast<Passenger>(user);
+
+        if (passenger != nullptr)
+        {
+            passengers.push_back(passenger);
+        }
+    }
+
+    if (passengers.empty())
+    {
+        std::cout
+            << "No passengers available.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Available Passengers:\n\n";
+
+    for (std::size_t i = 0; i < passengers.size(); ++i)
+    {
+        std::cout
+            << i + 1
+            << ". "
+            << passengers[i]->getFullName()
+            << " | Passport: "
+            << passengers[i]->getPassportNumber()
+            << "\n";
+    }
+
+    std::cout << "\nSelect Passenger: ";
+
+    int passengerChoice;
+
+    if (!(std::cin >> passengerChoice))
     {
         std::cin.clear();
 
@@ -1972,225 +2150,1023 @@ void ConsoleUI::searchFlights() const
         '\n'
     );
 
-    FlightSearchService searchService;
+    if (passengerChoice < 1 ||
+        passengerChoice >
+            static_cast<int>(passengers.size()))
+    {
+        std::cout
+            << "\nInvalid passenger selection.\n";
 
-    std::vector<std::shared_ptr<Flight>> results;
+        pause();
+        return;
+    }
+
+    auto passenger =
+        passengers[passengerChoice - 1];
+
+    // ========================================================
+    // 2. Select Flight
+    // ========================================================
+
+    std::cout
+        << "\nAvailable Flights:\n\n";
+
+    std::vector<std::shared_ptr<Flight>> availableFlights;
+
+    for (const auto& flight : flights)
+    {
+        if (flight == nullptr)
+        {
+            continue;
+        }
+
+        if (flight->getStatus() ==
+                FlightStatus::Cancelled ||
+            flight->getStatus() ==
+                FlightStatus::Completed)
+        {
+            continue;
+        }
+
+        availableFlights.push_back(flight);
+    }
+
+    if (availableFlights.empty())
+    {
+        std::cout
+            << "No available flights.\n";
+
+        pause();
+        return;
+    }
+
+    for (std::size_t i = 0;
+         i < availableFlights.size();
+         ++i)
+    {
+        const auto& flight =
+            availableFlights[i];
+
+        std::cout
+            << i + 1
+            << ". "
+            << flight->getFlightNumber()
+            << " | "
+            << flight->getOrigin()
+            << " -> "
+            << flight->getDestination()
+            << " | Departure: "
+            << flight->getDepartureTime()
+            << " | Price: "
+            << flight->getPrice()
+            << " | Available Seats: "
+            << flight->getAvailableSeats()
+            << "\n";
+    }
+
+    std::cout
+        << "\nSelect Flight: ";
+
+    int flightChoice;
+
+    if (!(std::cin >> flightChoice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid input.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (flightChoice < 1 ||
+        flightChoice >
+            static_cast<int>(
+                availableFlights.size()
+            ))
+    {
+        std::cout
+            << "\nInvalid flight selection.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight =
+        availableFlights[flightChoice - 1];
+
+    // ========================================================
+    // 3. Select Seat
+    // ========================================================
+
+    std::cout
+        << "\n=====================================\n"
+        << "Seat Selection\n"
+        << "=====================================\n\n";
+
+    std::cout
+        << "Available Seats: "
+        << flight->getAvailableSeats()
+        << "\n";
+
+    std::cout
+        << "Enter Seat Number "
+        << "(example: 12A): ";
+
+    std::string seatNumber;
+
+    std::getline(
+        std::cin,
+        seatNumber
+    );
+
+    if (seatNumber.empty())
+    {
+        std::cout
+            << "\nSeat number cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 4. Booking Date
+    // ========================================================
+
+    std::cout
+        << "Booking Date (YYYY-MM-DD): ";
+
+    std::string bookingDate;
+
+    std::getline(
+        std::cin,
+        bookingDate
+    );
+
+    if (bookingDate.empty())
+    {
+        std::cout
+            << "\nBooking date cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 5. Payment Method
+    // ========================================================
+
+    std::cout
+        << "\nPayment Method:\n"
+        << "1. Cash\n"
+        << "2. Card\n"
+        << "3. Bank Transfer\n"
+        << "\nChoose Payment Method: ";
+
+    int paymentChoice;
+
+    if (!(std::cin >> paymentChoice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid payment method.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    PaymentMethod paymentMethod;
+
+    switch (paymentChoice)
+    {
+        case 1:
+            paymentMethod = PaymentMethod::Cash;
+            break;
+
+        case 2:
+            paymentMethod = PaymentMethod::Card;
+            break;
+
+        case 3:
+            paymentMethod =
+                PaymentMethod::BankTransfer;
+            break;
+
+        default:
+            std::cout
+                << "\nInvalid payment method.\n";
+
+            pause();
+            return;
+    }
+
+    // ========================================================
+    // 6. Create Reservation
+    // ========================================================
 
     try
     {
-        switch (choice)
-        {
-            case 1:
-            {
-                std::string destination;
+        auto reservation =
+            bookingService.createReservation(
+                passenger,
+                flight,
+                seatNumber,
+                bookingDate,
+                paymentMethod
+            );
 
-                std::cout
-                    << "\nDestination: ";
-
-                std::getline(
-                    std::cin,
-                    destination
-                );
-
-                results =
-                    searchService.searchByDestination(
-                        flights,
-                        destination
-                    );
-
-                break;
-            }
-
-            case 2:
-            {
-                std::string date;
-
-                std::cout
-                    << "\nDate (YYYY-MM-DD): ";
-
-                std::getline(
-                    std::cin,
-                    date
-                );
-
-                results =
-                    searchService.searchByDate(
-                        flights,
-                        date
-                    );
-
-                break;
-            }
-
-            case 3:
-            {
-                double maximumPrice;
-
-                std::cout
-                    << "\nMaximum Price: ";
-
-                if (!(std::cin >> maximumPrice))
-                {
-                    std::cin.clear();
-
-                    std::cin.ignore(
-                        std::numeric_limits<std::streamsize>::max(),
-                        '\n'
-                    );
-
-                    std::cout
-                        << "\nInvalid price.\n";
-
-                    pause();
-                    return;
-                }
-
-                std::cin.ignore(
-                    std::numeric_limits<std::streamsize>::max(),
-                    '\n'
-                );
-
-                results =
-                    searchService.searchByMaximumPrice(
-                        flights,
-                        maximumPrice
-                    );
-
-                break;
-            }
-
-            case 4:
-            {
-                std::string destination;
-                std::string date;
-                double maximumPrice;
-
-                std::cout
-                    << "\nDestination: ";
-
-                std::getline(
-                    std::cin,
-                    destination
-                );
-
-                std::cout
-                    << "Date (YYYY-MM-DD): ";
-
-                std::getline(
-                    std::cin,
-                    date
-                );
-
-                std::cout
-                    << "Maximum Price: ";
-
-                if (!(std::cin >> maximumPrice))
-                {
-                    std::cin.clear();
-
-                    std::cin.ignore(
-                        std::numeric_limits<std::streamsize>::max(),
-                        '\n'
-                    );
-
-                    std::cout
-                        << "\nInvalid price.\n";
-
-                    pause();
-                    return;
-                }
-
-                std::cin.ignore(
-                    std::numeric_limits<std::streamsize>::max(),
-                    '\n'
-                );
-
-                results =
-                    searchService.search(
-                        flights,
-                        destination,
-                        date,
-                        maximumPrice
-                    );
-
-                break;
-            }
-
-            case 5:
-                return;
-
-            default:
-                std::cout
-                    << "\nInvalid option.\n";
-
-                pause();
-                return;
-        }
-
-        clearScreen();
-
-        std::cout
-            << "=====================================\n"
-            << "          Search Results\n"
-            << "=====================================\n\n";
-
-        if (results.empty())
+        if (reservation == nullptr)
         {
             std::cout
-                << "No matching flights found.\n";
+                << "\nFailed to create reservation.\n";
 
             pause();
             return;
         }
 
-        for (const auto& flight : results)
-        {
-            if (!flight)
-            {
-                continue;
-            }
+        std::cout
+            << "\n=====================================\n"
+            << "       Reservation Result\n"
+            << "=====================================\n\n";
 
+        std::cout
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Passenger      : "
+            << passenger->getFullName()
+            << "\n"
+            << "Flight         : "
+            << flight->getFlightNumber()
+            << "\n"
+            << "Route          : "
+            << flight->getOrigin()
+            << " -> "
+            << flight->getDestination()
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Price          : "
+            << reservation->getTotalPrice()
+            << "\n";
+
+        if (reservation->getStatus() ==
+            ReservationStatus::Confirmed)
+        {
             std::cout
-                << "-------------------------------------\n"
-                << "Flight Number : "
-                << flight->getFlightNumber()
-                << "\n"
-                << "From          : "
-                << flight->getOrigin()
-                << "\n"
-                << "To            : "
-                << flight->getDestination()
-                << "\n"
-                << "Departure     : "
-                << flight->getDepartureTime()
-                << "\n"
-                << "Arrival       : "
-                << flight->getArrivalTime()
-                << "\n"
-                << "Price         : "
-                << flight->getPrice()
-                << "\n"
-                << "Status        : "
-                << flightStatusToString(
-                    flight->getStatus()
-                )
-                << "\n";
+                << "Status         : Confirmed\n"
+                << "Payment        : Completed\n";
+        }
+        else if (
+            reservation->getStatus() ==
+            ReservationStatus::Waitlisted)
+        {
+            std::cout
+                << "Status         : Waitlisted\n"
+                << "Payment        : Pending\n";
         }
 
         std::cout
-            << "-------------------------------------\n";
-
-        pause();
+            << "\nReservation created successfully.\n";
     }
-    catch (const std::exception& e)
+    catch (const std::exception& exception)
     {
         std::cout
-            << "\nSearch failed.\n"
-            << e.what()
+            << "\nReservation failed: "
+            << exception.what()
             << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::modifyReservation()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "        Modify Reservation\n"
+        << "=====================================\n\n";
+
+    const auto& reservations =
+        bookingService.getAllReservations();
+
+    if (reservations.empty())
+    {
+        std::cout
+            << "No reservations available.\n";
 
         pause();
+        return;
     }
+
+    // ========================================================
+    // 1. Display Reservations
+    // ========================================================
+
+    std::cout
+        << "Existing Reservations:\n\n";
+
+    for (const auto& reservation : reservations)
+    {
+        if (reservation == nullptr)
+        {
+            continue;
+        }
+
+        auto passenger =
+            reservation->getPassenger();
+
+        auto flight =
+            reservation->getFlight();
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Passenger      : "
+            << (passenger != nullptr
+                    ? passenger->getFullName()
+                    : "Unknown")
+            << "\n"
+            << "Flight         : "
+            << (flight != nullptr
+                    ? flight->getFlightNumber()
+                    : "Unknown")
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Status         : ";
+
+        if (reservation->getStatus() ==
+            ReservationStatus::Confirmed)
+        {
+            std::cout << "Confirmed";
+        }
+        else if (
+            reservation->getStatus() ==
+            ReservationStatus::Waitlisted)
+        {
+            std::cout << "Waitlisted";
+        }
+        else
+        {
+            std::cout << "Cancelled";
+        }
+
+        std::cout
+            << "\n"
+            << "-------------------------------------\n";
+    }
+
+    // ========================================================
+    // 2. Select Reservation
+    // ========================================================
+
+    std::cout
+        << "\nEnter Reservation ID: ";
+
+    int reservationId;
+
+    if (!(std::cin >> reservationId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid reservation ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto reservation =
+        bookingService.getReservation(
+            reservationId
+        );
+
+    if (reservation == nullptr)
+    {
+        std::cout
+            << "\nReservation not found.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 3. Validate Reservation
+    // ========================================================
+
+    if (reservation->getStatus() ==
+        ReservationStatus::Cancelled)
+    {
+        std::cout
+            << "\nCannot modify a cancelled reservation.\n";
+
+        pause();
+        return;
+    }
+
+    if (reservation->getStatus() ==
+        ReservationStatus::Waitlisted)
+    {
+        std::cout
+            << "\nCannot modify a waitlisted reservation.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight =
+        reservation->getFlight();
+
+    if (flight == nullptr)
+    {
+        std::cout
+            << "\nFlight information is unavailable.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 4. Display Current Reservation
+    // ========================================================
+
+    std::cout
+        << "\n=====================================\n"
+        << "Current Reservation\n"
+        << "=====================================\n"
+        << "Reservation ID : "
+        << reservation->getId()
+        << "\n"
+        << "Flight         : "
+        << flight->getFlightNumber()
+        << "\n"
+        << "Route          : "
+        << flight->getOrigin()
+        << " -> "
+        << flight->getDestination()
+        << "\n"
+        << "Current Seat   : "
+        << reservation->getSeatNumber()
+        << "\n"
+        << "Available Seats: "
+        << flight->getAvailableSeats()
+        << "\n";
+
+    // ========================================================
+    // 5. Select New Seat
+    // ========================================================
+
+    std::cout
+        << "\nEnter New Seat Number "
+        << "(example: 12B): ";
+
+    std::string newSeatNumber;
+
+    std::getline(
+        std::cin,
+        newSeatNumber
+    );
+
+    if (newSeatNumber.empty())
+    {
+        std::cout
+            << "\nSeat number cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 6. Modify Reservation
+    // ========================================================
+    const std::string oldSeatNumber =
+        reservation->getSeatNumber();
+
+    try
+    {
+        const bool modified =
+            bookingService.modifyReservation(
+                reservationId,
+                newSeatNumber
+            );
+
+        if (!modified)
+        {
+            std::cout
+                << "\nFailed to modify reservation.\n"
+                << "The new seat may be unavailable "
+                << "or the reservation may not be modifiable.\n";
+
+            pause();
+            return;
+        }
+
+        std::cout
+            << "\n=====================================\n"
+            << "    Reservation Modified Successfully\n"
+            << "=====================================\n\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Flight         : "
+            << flight->getFlightNumber()
+            << "\n"
+            << "Old Seat       : "
+            << oldSeatNumber
+            << "\n"
+            << "New Seat       : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Status         : Confirmed\n";
+    }
+    catch (const std::exception& exception)
+    {
+        std::cout
+            << "\nModification failed: "
+            << exception.what()
+            << "\n";
+    }
+        pause();
+}
+
+void ConsoleUI::cancelReservation()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "        Cancel Reservation\n"
+        << "=====================================\n\n";
+
+    const auto& reservations =
+        bookingService.getAllReservations();
+
+    if (reservations.empty())
+    {
+        std::cout
+            << "No reservations available.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 1. Display Reservations
+    // ========================================================
+
+    std::cout
+        << "Existing Reservations:\n\n";
+
+    for (const auto& reservation : reservations)
+    {
+        if (reservation == nullptr)
+        {
+            continue;
+        }
+
+        auto passenger =
+            reservation->getPassenger();
+
+        auto flight =
+            reservation->getFlight();
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Passenger      : "
+            << (passenger != nullptr
+                    ? passenger->getFullName()
+                    : "Unknown")
+            << "\n"
+            << "Flight         : "
+            << (flight != nullptr
+                    ? flight->getFlightNumber()
+                    : "Unknown")
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Price          : "
+            << reservation->getTotalPrice()
+            << "\n"
+            << "Status         : ";
+
+        if (reservation->getStatus() ==
+            ReservationStatus::Confirmed)
+        {
+            std::cout << "Confirmed";
+        }
+        else if (
+            reservation->getStatus() ==
+            ReservationStatus::Waitlisted)
+        {
+            std::cout << "Waitlisted";
+        }
+        else
+        {
+            std::cout << "Cancelled";
+        }
+
+        std::cout
+            << "\n"
+            << "-------------------------------------\n";
+    }
+
+    // ========================================================
+    // 2. Select Reservation
+    // ========================================================
+
+    std::cout
+        << "\nEnter Reservation ID: ";
+
+    int reservationId;
+
+    if (!(std::cin >> reservationId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid reservation ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto reservation =
+        bookingService.getReservation(
+            reservationId
+        );
+
+    if (reservation == nullptr)
+    {
+        std::cout
+            << "\nReservation not found.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 3. Validate
+    // ========================================================
+
+    if (reservation->getStatus() ==
+        ReservationStatus::Cancelled)
+    {
+        std::cout
+            << "\nReservation is already cancelled.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 4. Confirmation
+    // ========================================================
+
+    std::cout
+        << "\n=====================================\n"
+        << "Reservation Details\n"
+        << "=====================================\n"
+        << "Reservation ID : "
+        << reservation->getId()
+        << "\n"
+        << "Passenger      : "
+        << reservation->getPassenger()->getFullName()
+        << "\n"
+        << "Flight         : "
+        << reservation->getFlight()->getFlightNumber()
+        << "\n"
+        << "Seat           : "
+        << reservation->getSeatNumber()
+        << "\n"
+        << "Price          : "
+        << reservation->getTotalPrice()
+        << "\n";
+
+    std::cout
+        << "\nAre you sure you want to cancel "
+        << "this reservation? (Y/N): ";
+
+    char confirmation;
+
+    std::cin >> confirmation;
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (confirmation != 'Y' &&
+        confirmation != 'y')
+    {
+        std::cout
+            << "\nCancellation aborted.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 5. Cancel Reservation
+    // ========================================================
+
+    try
+    {
+        const bool cancelled =
+            bookingService.cancelReservation(
+                reservationId
+            );
+
+        if (!cancelled)
+        {
+            std::cout
+                << "\nFailed to cancel reservation.\n";
+
+            pause();
+            return;
+        }
+
+        std::cout
+            << "\n=====================================\n"
+            << " Reservation Cancelled Successfully\n"
+            << "=====================================\n\n"
+            << "Reservation ID : "
+            << reservationId
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Status         : Cancelled\n"
+            << "\n";
+
+        std::cout
+            << "Payment refund processed successfully.\n";
+    }
+    catch (const std::exception& exception)
+    {
+        std::cout
+            << "\nCancellation failed: "
+            << exception.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::processPayment()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "          Process Payment\n"
+        << "=====================================\n\n";
+
+    const auto& reservations =
+        bookingService.getAllReservations();
+
+    if (reservations.empty())
+    {
+        std::cout
+            << "No reservations available.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 1. Display Reservations
+    // ========================================================
+
+    std::cout
+        << "Existing Reservations:\n\n";
+
+    for (const auto& reservation : reservations)
+    {
+        if (reservation == nullptr)
+        {
+            continue;
+        }
+
+        auto passenger =
+            reservation->getPassenger();
+
+        auto flight =
+            reservation->getFlight();
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Passenger      : "
+            << (passenger != nullptr
+                    ? passenger->getFullName()
+                    : "Unknown")
+            << "\n"
+            << "Flight         : "
+            << (flight != nullptr
+                    ? flight->getFlightNumber()
+                    : "Unknown")
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Amount         : "
+            << reservation->getTotalPrice()
+            << "\n"
+            << "-------------------------------------\n";
+    }
+
+    // ========================================================
+    // 2. Select Reservation
+    // ========================================================
+
+    std::cout
+        << "\nEnter Reservation ID: ";
+
+    int reservationId;
+
+    if (!(std::cin >> reservationId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid reservation ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto reservation =
+        bookingService.getReservation(
+            reservationId
+        );
+
+    if (reservation == nullptr)
+    {
+        std::cout
+            << "\nReservation not found.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 3. Get Payment
+    // ========================================================
+
+    auto payment =
+        bookingService.getPaymentByReservationId(
+            reservationId
+        );
+
+            if (payment == nullptr)
+    {
+        std::cout
+            << "\nNo payment found for this reservation.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 4. Display Payment Information
+    // ========================================================
+
+    std::cout
+        << "\n=====================================\n"
+        << "          Payment Details\n"
+        << "=====================================\n"
+        << "Payment ID     : "
+        << payment->getId()
+        << "\n"
+        << "Reservation ID : "
+        << payment->getReservationId()
+        << "\n"
+        << "Amount         : "
+        << payment->getAmount()
+        << "\n"
+        << "Transaction Date: "
+        << payment->getTransactionDate()
+        << "\n"
+        << "Status         : ";
+
+    switch (payment->getStatus())
+    {
+        case PaymentStatus::Pending:
+            std::cout << "Pending";
+            break;
+
+        case PaymentStatus::Completed:
+            std::cout << "Completed";
+            break;
+
+        case PaymentStatus::Failed:
+            std::cout << "Failed";
+            break;
+
+        case PaymentStatus::Refunded:
+            std::cout << "Refunded";
+            break;
+    }
+
+    std::cout
+        << "\n";
+
+    // ========================================================
+    // 5. Payment Status
+    // ========================================================
+
+    if (payment->getStatus() ==
+        PaymentStatus::Completed)
+    {
+        std::cout
+            << "\nPayment has already been completed.\n";
+    }
+    else if (
+        payment->getStatus() ==
+        PaymentStatus::Refunded)
+    {
+        std::cout
+            << "\nPayment has already been refunded.\n";
+    }
+    else if (
+        payment->getStatus() ==
+        PaymentStatus::Pending)
+    {
+        std::cout
+            << "\nPayment is currently pending.\n";
+    }
+    else
+    {
+        std::cout
+            << "\nPayment failed.\n";
+    }
+
+    pause();
 }
 
 // ============================================================
@@ -3716,15 +4692,6 @@ void ConsoleUI::createCrewMember()
                 );
             }
 
-            auto pilot =
-                std::make_shared<Pilot>(
-                    1,
-                    employeeId,
-                    fullName,
-                    maximumFlightHours,
-                    licenseNumber
-                );
-
             int nextId = 1;
 
             for (const auto& member : crewMembers)
@@ -3739,7 +4706,7 @@ void ConsoleUI::createCrewMember()
                 }
             }
 
-            pilot =
+            auto pilot =
                 std::make_shared<Pilot>(
                     nextId,
                     employeeId,
@@ -4881,6 +5848,711 @@ void ConsoleUI::removeCrewFromFlight()
     pause();
 }
 
+// ============================================================
+// MAINTENANCE MANAGEMENT
+// ============================================================
+
+void ConsoleUI::manageMaintenance()
+{
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << " Maintenance Management\n"
+            << "=====================================\n\n"
+
+            << "1. List Maintenance Records\n"
+            << "2. Schedule Maintenance\n"
+            << "3. Add Replaced Part\n"
+            << "4. Complete Maintenance\n"
+            << "5. Back\n\n"
+
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout << "\nInvalid input.\n";
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+        case 1:
+            listMaintenanceRecords();
+            break;
+
+        case 2:
+            scheduleMaintenance();
+            break;
+
+        case 3:
+            addReplacedPart();
+            break;
+
+        case 4:
+            completeMaintenance();
+            break;
+
+        case 5:
+            return;
+
+        default:
+            std::cout << "\nInvalid option.\n";
+            pause();
+            break;
+        }
+    }
+}
+
+void ConsoleUI::listMaintenanceRecords() const
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << " Maintenance Records\n"
+        << "=====================================\n\n";
+
+    if (!maintenanceService)
+    {
+        std::cout
+            << "Maintenance service is unavailable.\n";
+
+        pause();
+        return;
+    }
+
+    const auto& records =
+        maintenanceService->getAllMaintenanceRecords();
+
+    if (records.empty())
+    {
+        std::cout
+            << "No maintenance records available.\n";
+
+        pause();
+        return;
+    }
+
+    for (const auto& maintenance : records)
+    {
+        if (!maintenance)
+        {
+            continue;
+        }
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Maintenance ID: "
+            << maintenance->getId()
+            << "\n"
+
+            << "Aircraft ID: "
+            << maintenance->getAircraftId()
+            << "\n"
+
+            << "Date: "
+            << maintenance->getMaintenanceDate()
+            << "\n"
+
+            << "Issue: "
+            << maintenance->getIssueDescription()
+            << "\n"
+
+            << "Status: "
+            << (
+                maintenance->isCompleted()
+                    ? "Completed"
+                    : "In Progress"
+            )
+            << "\n"
+
+            << "Replaced Parts:\n";
+
+        const auto& parts =
+            maintenance->getReplacedParts();
+
+        if (parts.empty())
+        {
+            std::cout
+                << "  None\n";
+        }
+        else
+        {
+            for (const auto& part : parts)
+            {
+                std::cout
+                    << "  - "
+                    << part
+                    << "\n";
+            }
+        }
+    }
+
+    std::cout
+        << "-------------------------------------\n";
+
+    pause();
+}
+
+void ConsoleUI::scheduleMaintenance()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << " Schedule Maintenance\n"
+        << "=====================================\n\n";
+
+    if (aircraft.empty())
+    {
+        std::cout
+            << "No aircraft available.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout << "Available Aircraft:\n\n";
+
+    for (const auto& currentAircraft : aircraft)
+    {
+        if (!currentAircraft)
+        {
+            continue;
+        }
+
+        std::cout
+            << "ID: "
+            << currentAircraft->getId()
+            << " | Registration: "
+            << currentAircraft->getRegistrationNumber()
+            << " | Model: "
+            << currentAircraft->getManufacturer()
+            << " "
+            << currentAircraft->getModel()
+            << " | Status: "
+            << aircraftStatusToString(
+                   currentAircraft->getStatus()
+               )
+            << "\n";
+    }
+
+    int aircraftId;
+
+    std::cout
+        << "\nEnter Aircraft ID: ";
+
+    if (!(std::cin >> aircraftId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid aircraft ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto aircraftIt =
+        std::find_if(
+            aircraft.begin(),
+            aircraft.end(),
+            [aircraftId](
+                const std::shared_ptr<Aircraft>& currentAircraft
+            )
+            {
+                return currentAircraft &&
+                       currentAircraft->getId() == aircraftId;
+            }
+        );
+
+    if (aircraftIt == aircraft.end())
+    {
+        std::cout
+            << "\nAircraft not found.\n";
+
+        pause();
+        return;
+    }
+
+    std::string maintenanceDate;
+    std::string issueDescription;
+
+    std::cout
+        << "Maintenance Date: ";
+
+    std::getline(
+        std::cin,
+        maintenanceDate
+    );
+
+    std::cout
+        << "Issue Description: ";
+
+    std::getline(
+        std::cin,
+        issueDescription
+    );
+
+    try
+    {
+        auto maintenance =
+            maintenanceService->scheduleMaintenance(
+                *aircraftIt,
+                maintenanceDate,
+                issueDescription
+            );
+
+        AircraftRepository aircraftRepository;
+        aircraftRepository.save(aircraft);
+
+        MaintenanceRepository maintenanceRepository;
+        maintenanceRepository.save(
+            maintenanceService->getAllMaintenanceRecords()
+        );
+
+        std::cout
+            << "\nMaintenance scheduled successfully!\n"
+            << "Maintenance ID: "
+            << maintenance->getId()
+            << "\n";
+
+        pause();
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to schedule maintenance.\n"
+            << e.what()
+            << "\n";
+
+        pause();
+    }
+}
+
+void ConsoleUI::addReplacedPart()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << " Add Replaced Part\n"
+        << "=====================================\n\n";
+
+    int maintenanceId;
+
+    std::cout
+        << "Enter Maintenance ID: ";
+
+    if (!(std::cin >> maintenanceId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid maintenance ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto maintenance =
+        maintenanceService->getMaintenance(
+            maintenanceId
+        );
+
+    if (!maintenance)
+    {
+        std::cout
+            << "\nMaintenance record not found.\n";
+
+        pause();
+        return;
+    }
+
+    if (maintenance->isCompleted())
+    {
+        std::cout
+            << "\nMaintenance is already completed.\n";
+
+        pause();
+        return;
+    }
+
+    std::string part;
+
+    std::cout
+        << "Enter Replaced Part: ";
+
+    std::getline(
+        std::cin,
+        part
+    );
+
+    try
+    {
+        if (
+            maintenanceService->addReplacedPart(
+                maintenanceId,
+                part
+            )
+        )
+        {
+            MaintenanceRepository maintenanceRepository;
+
+            maintenanceRepository.save(
+                maintenanceService->getAllMaintenanceRecords()
+            );
+
+            std::cout
+                << "\nReplaced part added successfully!\n";
+        }
+        else
+        {
+            std::cout
+                << "\nFailed to add replaced part.\n";
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to add replaced part.\n"
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::completeMaintenance()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << " Complete Maintenance\n"
+        << "=====================================\n\n";
+
+    int maintenanceId;
+
+    std::cout
+        << "Enter Maintenance ID: ";
+
+    if (!(std::cin >> maintenanceId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid maintenance ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto maintenance =
+        maintenanceService->getMaintenance(
+            maintenanceId
+        );
+
+    if (!maintenance)
+    {
+        std::cout
+            << "\nMaintenance record not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto aircraftIt =
+        std::find_if(
+            aircraft.begin(),
+            aircraft.end(),
+            [maintenance](
+                const std::shared_ptr<Aircraft>& currentAircraft
+            )
+            {
+                return currentAircraft &&
+                       currentAircraft->getId()
+                           == maintenance->getAircraftId();
+            }
+        );
+
+    if (aircraftIt == aircraft.end())
+    {
+        std::cout
+            << "\nAircraft associated with this maintenance "
+            << "record was not found.\n";
+
+        pause();
+        return;
+    }
+
+    try
+    {
+        if (
+            maintenanceService->completeMaintenance(
+                maintenanceId,
+                *aircraftIt
+            )
+        )
+        {
+            AircraftRepository aircraftRepository;
+
+            aircraftRepository.save(aircraft);
+
+            MaintenanceRepository maintenanceRepository;
+
+            maintenanceRepository.save(
+                maintenanceService->getAllMaintenanceRecords()
+            );
+
+            std::cout
+                << "\nMaintenance completed successfully!\n"
+                << "Aircraft status changed to Available.\n";
+        }
+        else
+        {
+            std::cout
+                << "\nFailed to complete maintenance.\n";
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to complete maintenance.\n"
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::showReportsMenu()
+{
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << " Reports & Analytics\n"
+            << "=====================================\n\n"
+
+            << "1. Flight Performance Report\n"
+            << "2. Reservation Statistics Report\n"
+            << "3. Financial Summary Report\n"
+            << "4. Aircraft Utilization Report\n"
+            << "5. Maintenance Report\n"
+            << "6. Back\n\n"
+
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+        case 1:
+            generateFlightPerformanceReport();
+            break;
+
+        case 2:
+            generateReservationStatisticsReport();
+            break;
+
+        case 3:
+            generateFinancialSummaryReport();
+            break;
+
+        case 4:
+            generateAircraftUtilizationReport();
+            break;
+
+        case 5:
+            generateMaintenanceReport();
+            break;
+
+        case 6:
+            return;
+
+        default:
+            std::cout
+                << "\nInvalid option.\n";
+
+            pause();
+            break;
+        }
+    }
+}
+
+void ConsoleUI::generateFlightPerformanceReport()
+{
+    clearScreen();
+
+    ReportService reportService;
+
+    reportService.generateFlightPerformanceReport(
+        flights
+    );
+
+    pause();
+}
+
+void ConsoleUI::generateReservationStatisticsReport()
+{
+    clearScreen();
+
+    std::vector<std::shared_ptr<Passenger>>
+        passengers;
+
+    for (const auto& user : users)
+    {
+        auto passenger =
+            std::dynamic_pointer_cast<Passenger>(
+                user
+            );
+
+        if (passenger)
+        {
+            passengers.push_back(passenger);
+        }
+    }
+
+    ReservationRepository reservationRepository;
+
+    auto reservations =
+        reservationRepository.load(
+            passengers,
+            flights
+        );
+
+    ReportService reportService;
+
+    reportService.generateReservationStatisticsReport(
+        reservations
+    );
+
+    pause();
+}
+
+void ConsoleUI::generateFinancialSummaryReport()
+{
+    clearScreen();
+
+    PaymentRepository paymentRepository;
+
+    auto payments =
+        paymentRepository.load();
+
+    ReportService reportService;
+
+    reportService.generateFinancialSummaryReport(
+        payments
+    );
+
+    pause();
+}
+
+void ConsoleUI::generateAircraftUtilizationReport()
+{
+    clearScreen();
+
+    ReportService reportService;
+
+    reportService.generateAircraftUtilizationReport(
+        aircraft
+    );
+
+    pause();
+}
+
+void ConsoleUI::generateMaintenanceReport()
+{
+    clearScreen();
+
+    if (!maintenanceService)
+    {
+        std::cout
+            << "Maintenance service is unavailable.\n";
+
+        pause();
+        return;
+    }
+
+    ReportService reportService;
+
+    reportService.generateMaintenanceReport(
+        maintenanceService->getAllMaintenanceRecords()
+    );
+
+    pause();
+}
 // ============================================================
 // LOGOUT
 // ============================================================

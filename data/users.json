@@ -32,5 +32,29 @@
         "preferredSeat": "12A",
         "role": "Passenger",
         "username": "passenger"
+    },
+    {
+        "email": "efw",
+        "fullName": "me me",
+        "id": 4,
+        "isActive": true,
+        "loyaltyPoints": 0,
+        "mealPreference": "",
+        "passportNumber": "4564",
+        "passwordHash": "38af81fb969e34e8b51b385c7515c20f3c315353a7e6fef618e3b22ed5a7a40542543235b2dc7bfcea95398cbb1f068f7a707150397c8b75057f6c27d8328c40:8f4417e02519ac7c2042a85db3ca711023b9c74f6abf99c0bcd04e22b8e4f5a9",
+        "phone": "23",
+        "preferredSeat": "",
+        "role": "Passenger",
+        "username": "me"
+    },
+    {
+        "email": "medhat@example.com",
+        "fullName": "Medhat Adek",
+        "id": 5,
+        "isActive": true,
+        "passwordHash": "9380c7af850fb60a280f063e637e5587b87ec680f63289170ced204ede0ed915bf8fb56fe893625cec64c53ee8e057b72a4c8aa5e215985e2915b64eade9e2d7:69a480978e2036ed79a29652761192d6ccc6b8a0a967a65304dc039902640120",
+        "phone": "01000000000",
+        "role": "Administrator",
+        "username": "medhat"
     }
 ]

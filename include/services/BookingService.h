@@ -8,6 +8,7 @@
 #include "models/Reservation.h"
 #include "services/PaymentService.h"
 #include "services/LoyaltyService.h"
+#include "repositories/ReservationRepository.h"
 
 class BookingService
 {
@@ -21,6 +22,7 @@ private:
 
     // Waitlisted reservations
     std::queue<std::shared_ptr<Reservation>> waitlist;
+    ReservationRepository reservationRepository;
 
 public:
     explicit BookingService(
@@ -58,6 +60,10 @@ public:
         void processWaitlist(
         const std::shared_ptr<Flight>& flight
     );
+
+    std::shared_ptr<Payment> getPaymentByReservationId(
+        int reservationId
+    ) const;
 };
 
 #endif
