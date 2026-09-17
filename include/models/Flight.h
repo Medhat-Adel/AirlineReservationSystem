@@ -77,6 +77,10 @@ public:
         const std::shared_ptr<CrewMember>& crewMember
     );
 
+    void restoreCrewMember(
+        const std::shared_ptr<CrewMember>& crewMember
+    );
+
     bool removeCrewMember(int crewMemberId);
 
     const std::vector<std::shared_ptr<CrewMember>>&

@@ -1,5 +1,5 @@
 #include "models/Passenger.h"
-#include <iostream>
+
 #include <stdexcept>
 
 Passenger::Passenger(
@@ -24,22 +24,23 @@ Passenger::Passenger(
         isActive
     ),
       passportNumber(passportNumber),
-      loyaltyPoints(loyaltyPoints)
+      loyaltyPoints(loyaltyPoints),
+      preferredSeat(""),
+      mealPreference("")
 {
-}
+    if (passportNumber.empty())
+    {
+        throw std::invalid_argument(
+            "Passport number cannot be empty."
+        );
+    }
 
-void Passenger::displayMenu() const
-{
-    std::cout << "\n";
-    std::cout << "===== Passenger Menu =====\n";
-    std::cout << "1. Search Flights\n";
-    std::cout << "2. Make Reservation\n";
-    std::cout << "3. Manage Reservations\n";
-    std::cout << "4. Online Check-In\n";
-    std::cout << "5. View Boarding Pass\n";
-    std::cout << "6. View Profile\n";
-    std::cout << "7. Loyalty Program\n";
-    std::cout << "0. Logout\n";
+    if (loyaltyPoints < 0)
+    {
+        throw std::invalid_argument(
+            "Loyalty points cannot be negative."
+        );
+    }
 }
 
 const std::string& Passenger::getPassportNumber() const
@@ -54,25 +55,102 @@ int Passenger::getLoyaltyPoints() const
 
 void Passenger::addLoyaltyPoints(int points)
 {
-    if (points < 0)
+    if (points <= 0)
     {
-        throw std::invalid_argument("Loyalty points cannot be negative.");
+        throw std::invalid_argument(
+            "Points must be positive."
+        );
     }
 
     loyaltyPoints += points;
 }
 
-void Passenger::redeemLoyaltyPoints(int points)
+bool Passenger::redeemLoyaltyPoints(int points)
 {
     if (points <= 0)
     {
-        throw std::invalid_argument("Points to redeem must be positive.");
+        return false;
     }
 
     if (points > loyaltyPoints)
     {
-        throw std::runtime_error("Insufficient loyalty points.");
+        return false;
     }
 
     loyaltyPoints -= points;
+
+    return true;
+}
+
+const std::string& Passenger::getPreferredSeat() const
+{
+    return preferredSeat;
+}
+
+const std::string& Passenger::getMealPreference() const
+{
+    return mealPreference;
+}
+
+void Passenger::setPreferredSeat(
+    const std::string& preferredSeat
+)
+{
+    if (preferredSeat.empty())
+    {
+        throw std::invalid_argument(
+            "Preferred seat cannot be empty."
+        );
+    }
+
+    this->preferredSeat = preferredSeat;
+}
+
+void Passenger::setMealPreference(
+    const std::string& mealPreference
+)
+{
+    if (mealPreference.empty())
+    {
+        throw std::invalid_argument(
+            "Meal preference cannot be empty."
+        );
+    }
+
+    this->mealPreference = mealPreference;
+}
+
+void Passenger::addTravelHistory(
+    const std::shared_ptr<Flight>& flight
+)
+{
+    if (flight == nullptr)
+    {
+        throw std::invalid_argument(
+            "Flight cannot be null."
+        );
+    }
+
+    travelHistory.push_back(flight);
+}
+
+const std::vector<std::shared_ptr<Flight>>&
+Passenger::getTravelHistory() const
+{
+    return travelHistory;
+}
+
+void Passenger::displayMenu() const
+{
+    std::cout << "\n========================================\n";
+    std::cout << "          PASSENGER MENU\n";
+    std::cout << "========================================\n";
+    std::cout << "1. Search Flights\n";
+    std::cout << "2. Make Reservation\n";
+    std::cout << "3. Manage Reservations\n";
+    std::cout << "4. Online Check-In\n";
+    std::cout << "5. View Boarding Pass\n";
+    std::cout << "6. View Profile\n";
+    std::cout << "7. Loyalty Program\n";
+    std::cout << "8. Logout\n";
 }

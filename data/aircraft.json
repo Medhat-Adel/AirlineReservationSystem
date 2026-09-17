@@ -1,0 +1,20 @@
+[
+    {
+        "capacity": 180,
+        "id": 1,
+        "manufacturer": "Boeing",
+        "model": "737-800",
+        "nextMaintenanceDate": "2026-10-01",
+        "registrationNumber": "SU-GAB",
+        "status": "Available"
+    },
+    {
+        "capacity": 186,
+        "id": 2,
+        "manufacturer": "Airbus",
+        "model": "A320",
+        "nextMaintenanceDate": "2026-09-20",
+        "registrationNumber": "SU-GAC",
+        "status": "Maintenance"
+    }
+]

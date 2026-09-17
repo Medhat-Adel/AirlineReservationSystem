@@ -1,0 +1,30 @@
+[
+    {
+        "employeeId": "P001",
+        "fullName": "Ahmed Ali",
+        "id": 1,
+        "isActive": true,
+        "licenseNumber": "LIC-12345",
+        "maximumFlightHours": 100,
+        "role": "Pilot",
+        "totalFlightHours": 30
+    },
+    {
+        "employeeId": "FA001",
+        "fullName": "Sara Mohamed",
+        "id": 2,
+        "isActive": true,
+        "maximumFlightHours": 80,
+        "role": "Flight Attendant",
+        "totalFlightHours": 20
+    },
+    {
+        "employeeId": "151",
+        "fullName": "Medhat Adel",
+        "id": 3,
+        "isActive": true,
+        "maximumFlightHours": 8,
+        "role": "Flight Attendant",
+        "totalFlightHours": 0
+    }
+]

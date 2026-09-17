@@ -1,5 +1,6 @@
 #include "models/Flight.h"
 
+#include <algorithm>
 #include <stdexcept>
 
 Flight::Flight(
@@ -143,7 +144,9 @@ void Flight::setAircraft(
 
 // Seat management
 
-bool Flight::reserveSeat(const std::string& seatNumber)
+bool Flight::reserveSeat(
+    const std::string& seatNumber
+)
 {
     if (seatNumber.empty())
     {
@@ -168,7 +171,9 @@ bool Flight::reserveSeat(const std::string& seatNumber)
     return true;
 }
 
-bool Flight::releaseSeat(const std::string& seatNumber)
+bool Flight::releaseSeat(
+    const std::string& seatNumber
+)
 {
     return occupiedSeats.erase(seatNumber) > 0;
 }
@@ -181,7 +186,8 @@ bool Flight::isSeatAvailable(
         == occupiedSeats.end();
 }
 
-const std::set<std::string>& Flight::getOccupiedSeats() const
+const std::set<std::string>&
+Flight::getOccupiedSeats() const
 {
     return occupiedSeats;
 }
@@ -191,6 +197,8 @@ int Flight::getAvailableSeats() const
     return aircraft->getCapacity()
         - static_cast<int>(occupiedSeats.size());
 }
+
+// Crew management
 
 bool Flight::assignCrewMember(
     const std::shared_ptr<CrewMember>& crewMember
@@ -211,19 +219,59 @@ bool Flight::assignCrewMember(
         }
     }
 
-    if (!crewMember->canAssignFlight(flightDurationHours))
+    if (!crewMember->canAssignFlight(
+            flightDurationHours))
     {
         return false;
     }
 
-    crewMember->addFlightHours(flightDurationHours);
+    crewMember->addFlightHours(
+        flightDurationHours
+    );
 
     crewMembers.push_back(crewMember);
 
     return true;
 }
 
-bool Flight::removeCrewMember(int crewMemberId)
+void Flight::restoreCrewMember(
+    const std::shared_ptr<CrewMember>& crewMember
+)
+{
+    if (!crewMember)
+    {
+        throw std::invalid_argument(
+            "Crew member cannot be null."
+        );
+    }
+
+    const bool alreadyAssigned =
+        std::any_of(
+            crewMembers.begin(),
+            crewMembers.end(),
+            [&crewMember](
+                const std::shared_ptr<CrewMember>& existingCrew
+            )
+            {
+                return existingCrew &&
+                       existingCrew->getId()
+                           == crewMember->getId();
+            }
+        );
+
+    if (alreadyAssigned)
+    {
+        throw std::invalid_argument(
+            "Crew member is already assigned to this flight."
+        );
+    }
+
+    crewMembers.push_back(crewMember);
+}
+
+bool Flight::removeCrewMember(
+    int crewMemberId
+)
 {
     for (auto it = crewMembers.begin();
          it != crewMembers.end();

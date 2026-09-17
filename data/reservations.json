@@ -1,0 +1,22 @@
+[
+    {
+        "bookingDate": "2026-09-09",
+        "flightNumber": "MS123",
+        "id": 1,
+        "passengerId": 1,
+        "paymentMethod": "Card",
+        "seatNumber": "12A",
+        "status": "Confirmed",
+        "totalPrice": 5000.0
+    },
+    {
+        "bookingDate": "2026-09-09",
+        "flightNumber": "MS123",
+        "id": 2,
+        "passengerId": 2,
+        "paymentMethod": "Cash",
+        "seatNumber": "12B",
+        "status": "Cancelled",
+        "totalPrice": 5000.0
+    }
+]

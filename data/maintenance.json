@@ -1,0 +1,23 @@
+[
+    {
+        "aircraftId": 101,
+        "completed": true,
+        "id": 1,
+        "issueDescription": "Engine inspection",
+        "maintenanceDate": "2026-09-10",
+        "replacedParts": [
+            "Oil Filter",
+            "Air Filter"
+        ]
+    },
+    {
+        "aircraftId": 102,
+        "completed": false,
+        "id": 2,
+        "issueDescription": "Brake system issue",
+        "maintenanceDate": "2026-09-15",
+        "replacedParts": [
+            "Brake Pad"
+        ]
+    }
+]

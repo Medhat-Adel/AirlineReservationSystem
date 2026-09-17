@@ -1,0 +1,36 @@
+[
+    {
+        "email": "admin@example.com",
+        "fullName": "System Admin",
+        "id": 1,
+        "isActive": true,
+        "passwordHash": "6a87a642c20488116e1d741fe007e09a59dc0bd55e95fd84c4eec267a7175d27a94fd05bec9c8ff7459b216700e68184936cfb8132ce582336d6f2aec9b2b722:bbfb6b730d96f306585673514b8e0660f425a6fabeb3854b6a469b5c29aa46bc",
+        "phone": "01000000001",
+        "role": "Administrator",
+        "username": "admin"
+    },
+    {
+        "email": "agent@example.com",
+        "fullName": "Booking Agent",
+        "id": 2,
+        "isActive": true,
+        "passwordHash": "1e2124752ef3632603a3f8540a0ca46f505ea2f09e52c43ae9d08210bc0ebc129d5367b0a4c2b81f1b6a5c4bb500a4d2ad3c5046b6bd091e16f39f612141bc4d:446bea5aad6a7dd955e7789b1c9534ada3f09515683c1b83b6110f02a76e167f",
+        "phone": "01000000002",
+        "role": "BookingAgent",
+        "username": "agent"
+    },
+    {
+        "email": "passenger@example.com",
+        "fullName": "Passenger One",
+        "id": 3,
+        "isActive": true,
+        "loyaltyPoints": 150,
+        "mealPreference": "Vegetarian",
+        "passportNumber": "P12345678",
+        "passwordHash": "dac4d6573056fed65c8a51e283c5d617eb50677d4c02fa5735956d3757c1e493e4e9f0e2c69ea58266422e0a59395dfae69342fa60d6f367c93aaa9a308b5e65:0077e01e67603eb0966e080e176a540fd5cb6728352fa08dfda5629b8d0d4f82",
+        "phone": "01000000003",
+        "preferredSeat": "12A",
+        "role": "Passenger",
+        "username": "passenger"
+    }
+]

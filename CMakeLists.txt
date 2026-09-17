@@ -29,6 +29,23 @@ add_executable(AirlineReservationSystem
     src/models/Payment.cpp
     src/services/PaymentService.cpp
     src/services/FlightSearchService.cpp
+    src/services/PassengerService.cpp
+
+    src/models/CheckIn.cpp
+    src/models/BoardingPass.cpp
+    src/services/CheckInService.cpp
+    src/services/FlightOperationsService.cpp
+    src/models/Maintenance.cpp
+    src/services/MaintenanceService.cpp
+    src/services/ReportService.cpp
+
+    src/repositories/AircraftRepository.cpp
+    src/repositories/FlightRepository.cpp
+    src/repositories/CrewRepository.cpp
+    src/repositories/UserRepository.cpp
+    src/repositories/PaymentRepository.cpp
+    src/repositories/ReservationRepository.cpp
+    src/repositories/MaintenanceRepository.cpp
 )
 
 target_include_directories(AirlineReservationSystem

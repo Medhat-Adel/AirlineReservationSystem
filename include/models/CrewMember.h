@@ -26,6 +26,7 @@ public:
 
     virtual ~CrewMember() = default;
 
+    // Getters
     int getId() const;
     const std::string& getEmployeeId() const;
     const std::string& getFullName() const;
@@ -35,11 +36,26 @@ public:
 
     bool getIsActive() const;
 
+    // Flight hours
     bool canAssignFlight(int flightHours) const;
 
     void addFlightHours(int flightHours);
     void subtractFlightHours(int flightHours);
 
+    // Setters
+    void setFullName(
+        const std::string& fullName
+    );
+
+    void setMaximumFlightHours(
+        int maximumFlightHours
+    );
+
+    void setIsActive(
+        bool isActive
+    );
+
+    // Polymorphism
     virtual std::string getCrewRole() const = 0;
 };
 

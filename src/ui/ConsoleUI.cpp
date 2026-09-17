@@ -1,0 +1,4917 @@
+#include "ui/ConsoleUI.h"
+
+#include <algorithm>
+#include <cstdlib>
+#include <iostream>
+#include <limits>
+#include <stdexcept>
+#include <string>
+
+#include "models/Administrator.h"
+#include "models/BookingAgent.h"
+#include "models/Passenger.h"
+#include "models/Pilot.h"
+#include "models/FlightAttendant.h"
+
+#include "repositories/UserRepository.h"
+#include "repositories/FlightRepository.h"
+#include "repositories/AircraftRepository.h"
+#include "repositories/CrewRepository.h"
+
+#include "services/AuthenticationService.h"
+#include "services/UserManagementService.h"
+#include "services/FlightSearchService.h"
+#include "services/FlightOperationsService.h"
+
+// ============================================================
+// CONSTRUCTOR
+// ============================================================
+
+ConsoleUI::ConsoleUI(
+    std::vector<std::shared_ptr<User>>& users,
+    AuthenticationService& authenticationService,
+    UserManagementService& userManagementService
+)
+    : users(users),
+      authenticationService(authenticationService),
+      userManagementService(userManagementService),
+      currentUser(nullptr)
+{
+    AircraftRepository aircraftRepository;
+    CrewRepository crewRepository;
+    FlightRepository flightRepository;
+
+    aircraft = aircraftRepository.load();
+
+    crewMembers = crewRepository.load();
+
+    flights =
+        flightRepository.load(
+            aircraft,
+            crewMembers
+        );
+}
+
+// ============================================================
+// RUN
+// ============================================================
+
+void ConsoleUI::run()
+{
+    showWelcomeScreen();
+
+    if (users.empty())
+    {
+        setupInitialAdministrator();
+    }
+
+    while (true)
+    {
+        try
+        {
+            showLoginScreen();
+
+            if (!currentUser)
+            {
+                continue;
+            }
+
+            showMainMenu();
+
+            if (!currentUser)
+            {
+                continue;
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cerr
+                << "\nError: "
+                << e.what()
+                << "\n";
+
+            pause();
+        }
+    }
+}
+
+// ============================================================
+// WELCOME
+// ============================================================
+
+void ConsoleUI::showWelcomeScreen() const
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "   Airline Reservation System\n"
+        << "=====================================\n"
+        << "          Welcome!\n"
+        << "=====================================\n\n";
+}
+
+// ============================================================
+// LOGIN
+// ============================================================
+
+void ConsoleUI::showLoginScreen()
+{
+    std::string username;
+    std::string password;
+
+    std::cout
+        << "\n========== Login ==========\n";
+
+    std::cout
+        << "Username: ";
+
+    std::getline(
+        std::cin,
+        username
+    );
+
+    if (std::cin.eof())
+    {
+        throw std::runtime_error(
+            "Input stream closed."
+        );
+    }
+
+    std::cout
+        << "Password: ";
+
+    std::getline(
+        std::cin,
+        password
+    );
+
+    if (std::cin.eof())
+    {
+        throw std::runtime_error(
+            "Input stream closed."
+        );
+    }
+
+    try
+    {
+        currentUser =
+            authenticationService.login(
+                username,
+                password
+            );
+
+        std::cout
+            << "\nLogin successful!\n"
+            << "Welcome, "
+            << currentUser->getFullName()
+            << "!\n";
+
+        pause();
+    }
+    catch (const std::exception& e)
+    {
+        currentUser = nullptr;
+
+        std::cout
+            << "\nLogin failed: "
+            << e.what()
+            << "\n";
+
+        pause();
+    }
+}
+
+// ============================================================
+// MAIN MENU
+// ============================================================
+
+void ConsoleUI::showMainMenu()
+{
+    if (!currentUser)
+    {
+        return;
+    }
+
+    switch (currentUser->getRole())
+    {
+        case Role::Administrator:
+            showAdministratorMenu();
+            break;
+
+        case Role::BookingAgent:
+            showBookingAgentMenu();
+            break;
+
+        case Role::Passenger:
+            showPassengerMenu();
+            break;
+
+        default:
+            throw std::runtime_error(
+                "Unknown user role."
+            );
+    }
+}
+
+// ============================================================
+// ADMINISTRATOR MENU
+// ============================================================
+
+void ConsoleUI::showAdministratorMenu()
+{
+    while (currentUser)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "       Administrator Dashboard\n"
+            << "=====================================\n"
+            << "Welcome, "
+            << currentUser->getFullName()
+            << "\n\n";
+
+        std::cout
+            << "1. Manage Users\n"
+            << "2. Manage Flights\n"
+            << "3. Manage Aircraft\n"
+            << "4. Manage Crew\n"
+            << "5. Maintenance Management\n"
+            << "6. Reports & Analytics\n"
+            << "7. Logout\n\n"
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            case 1:
+                manageUsers();
+                break;
+
+            case 2:
+                manageFlights();
+                break;
+
+            case 3:
+                manageAircraft();
+                break;
+
+            case 4:
+                manageCrew();
+                break;
+
+            case 5:
+                std::cout
+                    << "\nMaintenance Management will be implemented next.\n";
+
+                pause();
+                break;
+
+            case 6:
+                std::cout
+                    << "\nReports & Analytics will be implemented next.\n";
+
+                pause();
+                break;
+
+            case 7:
+                logout();
+                break;
+
+            default:
+                std::cout
+                    << "\nInvalid option.\n";
+
+                pause();
+                break;
+        }
+    }
+}
+
+// ============================================================
+// BOOKING AGENT MENU
+// ============================================================
+
+void ConsoleUI::showBookingAgentMenu()
+{
+    while (currentUser)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "        Booking Agent Dashboard\n"
+            << "=====================================\n"
+            << "Welcome, "
+            << currentUser->getFullName()
+            << "\n\n";
+
+        std::cout
+            << "1. Search Flights\n"
+            << "2. Create Reservation\n"
+            << "3. Modify Reservation\n"
+            << "4. Cancel Reservation\n"
+            << "5. Airport Check-In\n"
+            << "6. Process Payment\n"
+            << "7. Manage Passengers\n"
+            << "8. Logout\n\n"
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            case 8:
+                logout();
+                break;
+
+            default:
+                std::cout
+                    << "\nThis feature will be implemented next.\n";
+
+                pause();
+                break;
+        }
+    }
+}
+
+// ============================================================
+// PASSENGER MENU
+// ============================================================
+
+void ConsoleUI::showPassengerMenu()
+{
+    while (currentUser)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "          Passenger Dashboard\n"
+            << "=====================================\n"
+            << "Welcome, "
+            << currentUser->getFullName()
+            << "\n\n";
+
+        std::cout
+            << "1. Search Flights\n"
+            << "2. Make Reservation\n"
+            << "3. Manage Reservations\n"
+            << "4. Online Check-In\n"
+            << "5. View Boarding Pass\n"
+            << "6. View Profile\n"
+            << "7. Loyalty Program\n"
+            << "8. Logout\n\n"
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            case 8:
+                logout();
+                break;
+
+            default:
+                std::cout
+                    << "\nThis feature will be implemented next.\n";
+
+                pause();
+                break;
+        }
+    }
+}
+
+// ============================================================
+// INITIAL ADMINISTRATOR
+// ============================================================
+
+void ConsoleUI::setupInitialAdministrator()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "       Initial System Setup\n"
+        << "=====================================\n"
+        << "No users were found.\n"
+        << "Create the first Administrator account.\n\n";
+
+    std::string username;
+    std::string password;
+    std::string fullName;
+    std::string email;
+    std::string phone;
+
+    std::cout << "Username: ";
+    std::getline(
+        std::cin,
+        username
+    );
+
+    std::cout << "Password: ";
+    std::getline(
+        std::cin,
+        password
+    );
+
+    std::cout << "Full Name: ";
+    std::getline(
+        std::cin,
+        fullName
+    );
+
+    std::cout << "Email: ";
+    std::getline(
+        std::cin,
+        email
+    );
+
+    std::cout << "Phone: ";
+    std::getline(
+        std::cin,
+        phone
+    );
+
+    auto administrator =
+        userManagementService.createAdministrator(
+            username,
+            password,
+            fullName,
+            email,
+            phone
+        );
+
+    UserRepository userRepository;
+
+    userRepository.save(users);
+
+    std::cout
+        << "\nAdministrator account created successfully!\n"
+        << "User ID: "
+        << administrator->getId()
+        << "\n";
+
+    pause();
+}
+
+// ============================================================
+// USER MANAGEMENT
+// ============================================================
+
+void ConsoleUI::manageUsers()
+{
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "            Manage Users\n"
+            << "=====================================\n\n"
+            << "1. List All Users\n"
+            << "2. Create Administrator\n"
+            << "3. Create Booking Agent\n"
+            << "4. Create Passenger\n"
+            << "5. Activate User\n"
+            << "6. Deactivate User\n"
+            << "7. Back\n\n"
+            << "Select an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            case 1:
+                listUsers();
+                break;
+
+            case 2:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "       Create Administrator\n"
+                    << "=====================================\n\n";
+
+                std::string username;
+                std::string password;
+                std::string fullName;
+                std::string email;
+                std::string phone;
+
+                std::cout << "Username: ";
+                std::getline(
+                    std::cin,
+                    username
+                );
+
+                std::cout << "Password: ";
+                std::getline(
+                    std::cin,
+                    password
+                );
+
+                std::cout << "Full Name: ";
+                std::getline(
+                    std::cin,
+                    fullName
+                );
+
+                std::cout << "Email: ";
+                std::getline(
+                    std::cin,
+                    email
+                );
+
+                std::cout << "Phone: ";
+                std::getline(
+                    std::cin,
+                    phone
+                );
+
+                try
+                {
+                    auto administrator =
+                        userManagementService.createAdministrator(
+                            username,
+                            password,
+                            fullName,
+                            email,
+                            phone
+                        );
+
+                    UserRepository userRepository;
+
+                    userRepository.save(users);
+
+                    std::cout
+                        << "\nAdministrator created successfully!\n"
+                        << "User ID: "
+                        << administrator->getId()
+                        << "\n";
+
+                    pause();
+                }
+                catch (const std::exception& e)
+                {
+                    std::cout
+                        << "\nFailed to create administrator.\n"
+                        << e.what()
+                        << "\n";
+
+                    pause();
+                }
+
+                break;
+            }
+
+            case 3:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "        Create Booking Agent\n"
+                    << "=====================================\n\n";
+
+                std::string username;
+                std::string password;
+                std::string fullName;
+                std::string email;
+                std::string phone;
+
+                std::cout << "Username: ";
+                std::getline(
+                    std::cin,
+                    username
+                );
+
+                std::cout << "Password: ";
+                std::getline(
+                    std::cin,
+                    password
+                );
+
+                std::cout << "Full Name: ";
+                std::getline(
+                    std::cin,
+                    fullName
+                );
+
+                std::cout << "Email: ";
+                std::getline(
+                    std::cin,
+                    email
+                );
+
+                std::cout << "Phone: ";
+                std::getline(
+                    std::cin,
+                    phone
+                );
+
+                try
+                {
+                    auto bookingAgent =
+                        userManagementService.createBookingAgent(
+                            username,
+                            password,
+                            fullName,
+                            email,
+                            phone
+                        );
+
+                    UserRepository userRepository;
+
+                    userRepository.save(users);
+
+                    std::cout
+                        << "\nBooking Agent created successfully!\n"
+                        << "User ID: "
+                        << bookingAgent->getId()
+                        << "\n";
+
+                    pause();
+                }
+                catch (const std::exception& e)
+                {
+                    std::cout
+                        << "\nFailed to create booking agent.\n"
+                        << e.what()
+                        << "\n";
+
+                    pause();
+                }
+
+                break;
+            }
+
+            case 4:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "          Create Passenger\n"
+                    << "=====================================\n\n";
+
+                std::string username;
+                std::string password;
+                std::string fullName;
+                std::string email;
+                std::string phone;
+                std::string passportNumber;
+
+                std::cout << "Username: ";
+                std::getline(
+                    std::cin,
+                    username
+                );
+
+                std::cout << "Password: ";
+                std::getline(
+                    std::cin,
+                    password
+                );
+
+                std::cout << "Full Name: ";
+                std::getline(
+                    std::cin,
+                    fullName
+                );
+
+                std::cout << "Email: ";
+                std::getline(
+                    std::cin,
+                    email
+                );
+
+                std::cout << "Phone: ";
+                std::getline(
+                    std::cin,
+                    phone
+                );
+
+                std::cout << "Passport Number: ";
+                std::getline(
+                    std::cin,
+                    passportNumber
+                );
+
+                try
+                {
+                    auto passenger =
+                        userManagementService.createPassenger(
+                            username,
+                            password,
+                            fullName,
+                            email,
+                            phone,
+                            passportNumber
+                        );
+
+                    UserRepository userRepository;
+
+                    userRepository.save(users);
+
+                    std::cout
+                        << "\nPassenger created successfully!\n"
+                        << "User ID: "
+                        << passenger->getId()
+                        << "\n";
+
+                    pause();
+                }
+                catch (const std::exception& e)
+                {
+                    std::cout
+                        << "\nFailed to create passenger.\n"
+                        << e.what()
+                        << "\n";
+
+                    pause();
+                }
+
+                break;
+            }
+
+            case 5:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "            Activate User\n"
+                    << "=====================================\n\n";
+
+                int userId;
+
+                std::cout << "Enter User ID: ";
+
+                if (!(std::cin >> userId))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid user ID.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                try
+                {
+                    auto user =
+                        userManagementService.findUserById(
+                            userId
+                        );
+
+                    if (!user)
+                    {
+                        std::cout
+                            << "\nUser not found.\n";
+
+                        pause();
+                        break;
+                    }
+
+                    if (user->getIsActive())
+                    {
+                        std::cout
+                            << "\nUser is already active.\n";
+
+                        pause();
+                        break;
+                    }
+
+                    userManagementService.activateUser(
+                        userId
+                    );
+
+                    UserRepository userRepository;
+
+                    userRepository.save(users);
+
+                    std::cout
+                        << "\nUser activated successfully!\n";
+
+                    pause();
+                }
+                catch (const std::exception& e)
+                {
+                    std::cout
+                        << "\nFailed to activate user.\n"
+                        << e.what()
+                        << "\n";
+
+                    pause();
+                }
+
+                break;
+            }
+
+            case 6:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "          Deactivate User\n"
+                    << "=====================================\n\n";
+
+                int userId;
+
+                std::cout << "Enter User ID: ";
+
+                if (!(std::cin >> userId))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid user ID.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                try
+                {
+                    auto user =
+                        userManagementService.findUserById(
+                            userId
+                        );
+
+                    if (!user)
+                    {
+                        std::cout
+                            << "\nUser not found.\n";
+
+                        pause();
+                        break;
+                    }
+
+                    if (!user->getIsActive())
+                    {
+                        std::cout
+                            << "\nUser is already inactive.\n";
+
+                        pause();
+                        break;
+                    }
+
+                    userManagementService.deactivateUser(
+                        userId
+                    );
+
+                    UserRepository userRepository;
+
+                    userRepository.save(users);
+
+                    std::cout
+                        << "\nUser deactivated successfully!\n";
+
+                    pause();
+                }
+                catch (const std::exception& e)
+                {
+                    std::cout
+                        << "\nFailed to deactivate user.\n"
+                        << e.what()
+                        << "\n";
+
+                    pause();
+                }
+
+                break;
+            }
+
+            case 7:
+                return;
+
+            default:
+                std::cout
+                    << "\nInvalid option.\n";
+
+                pause();
+                break;
+        }
+    }
+}
+
+void ConsoleUI::listUsers() const
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "             All Users\n"
+        << "=====================================\n\n";
+
+    const auto& allUsers =
+        userManagementService.getAllUsers();
+
+    if (allUsers.empty())
+    {
+        std::cout
+            << "No users found.\n";
+
+        pause();
+        return;
+    }
+
+    for (const auto& user : allUsers)
+    {
+        if (!user)
+        {
+            continue;
+        }
+
+        std::string role;
+
+        switch (user->getRole())
+        {
+            case Role::Administrator:
+                role = "Administrator";
+                break;
+
+            case Role::BookingAgent:
+                role = "Booking Agent";
+                break;
+
+            case Role::Passenger:
+                role = "Passenger";
+                break;
+        }
+
+        std::cout
+            << "-------------------------------------\n"
+            << "ID       : "
+            << user->getId()
+            << "\n"
+            << "Username : "
+            << user->getUsername()
+            << "\n"
+            << "Name     : "
+            << user->getFullName()
+            << "\n"
+            << "Email    : "
+            << user->getEmail()
+            << "\n"
+            << "Phone    : "
+            << user->getPhone()
+            << "\n"
+            << "Role     : "
+            << role
+            << "\n"
+            << "Status   : "
+            << (
+                user->getIsActive()
+                    ? "Active"
+                    : "Inactive"
+            )
+            << "\n";
+
+        auto passenger =
+            std::dynamic_pointer_cast<Passenger>(user);
+
+        if (passenger)
+        {
+            std::cout
+                << "Passport  : "
+                << passenger->getPassportNumber()
+                << "\n"
+                << "Loyalty   : "
+                << passenger->getLoyaltyPoints()
+                << " points\n";
+        }
+    }
+
+    std::cout
+        << "-------------------------------------\n";
+
+    pause();
+}
+
+// ============================================================
+// FLIGHT MANAGEMENT
+// ============================================================
+
+void ConsoleUI::manageFlights()
+{
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "           Manage Flights\n"
+            << "=====================================\n\n"
+            << "1. List All Flights\n"
+            << "2. Create Flight\n"
+            << "3. Update Flight\n"
+            << "4. Delete Flight\n"
+            << "5. Search Flights\n"
+            << "6. Change Flight Status\n"
+            << "7. Back\n\n"
+            << "Select an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            case 1:
+                listFlights();
+                break;
+
+            case 2:
+                createFlight();
+                break;
+
+            case 3:
+                updateFlight();
+                break;
+
+            case 4:
+                deleteFlight();
+                break;
+
+            case 5:
+                searchFlights();
+                break;
+
+            case 6:
+                changeFlightStatus();
+                break;
+
+            case 7:
+                return;
+
+            default:
+                std::cout
+                    << "\nInvalid option.\n";
+
+                pause();
+                break;
+        }
+    }
+}
+
+// ============================================================
+// LIST FLIGHTS
+// ============================================================
+
+void ConsoleUI::listFlights() const
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "             All Flights\n"
+        << "=====================================\n\n";
+
+    if (flights.empty())
+    {
+        std::cout
+            << "No flights found.\n";
+
+        pause();
+        return;
+    }
+
+    for (const auto& flight : flights)
+    {
+        if (!flight)
+        {
+            continue;
+        }
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Flight Number : "
+            << flight->getFlightNumber()
+            << "\n"
+            << "Origin        : "
+            << flight->getOrigin()
+            << "\n"
+            << "Destination   : "
+            << flight->getDestination()
+            << "\n"
+            << "Departure     : "
+            << flight->getDepartureTime()
+            << "\n"
+            << "Arrival       : "
+            << flight->getArrivalTime()
+            << "\n"
+            << "Price         : "
+            << flight->getPrice()
+            << "\n"
+            << "Status        : "
+            << flightStatusToString(
+                flight->getStatus()
+            )
+            << "\n"
+            << "Available Seats: "
+            << flight->getAvailableSeats()
+            << "\n"
+            << "Duration      : "
+            << flight->getFlightDurationHours()
+            << " hours\n";
+
+        if (flight->getAircraft())
+        {
+            std::cout
+                << "Aircraft ID   : "
+                << flight->getAircraft()->getId()
+                << "\n"
+                << "Aircraft      : "
+                << flight->getAircraft()->getManufacturer()
+                << " "
+                << flight->getAircraft()->getModel()
+                << "\n"
+                << "Registration  : "
+                << flight->getAircraft()->getRegistrationNumber()
+                << "\n";
+        }
+
+        std::cout
+            << "Occupied Seats: "
+            << flight->getOccupiedSeats().size()
+            << "\n"
+            << "Crew Members  : "
+            << flight->getCrewMembers().size()
+            << "\n";
+    }
+
+    std::cout
+        << "-------------------------------------\n";
+
+    pause();
+}
+
+// ============================================================
+// CREATE FLIGHT
+// ============================================================
+
+void ConsoleUI::createFlight()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "            Create Flight\n"
+        << "=====================================\n\n";
+
+    if (aircraft.empty())
+    {
+        std::cout
+            << "No aircraft are available.\n\n"
+            << "Please create an aircraft first\n"
+            << "from Aircraft Management.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Available Aircraft:\n\n";
+
+    for (const auto& aircraftItem : aircraft)
+    {
+        if (!aircraftItem)
+        {
+            continue;
+        }
+
+        std::cout
+            << "ID: "
+            << aircraftItem->getId()
+            << " | "
+            << aircraftItem->getManufacturer()
+            << " "
+            << aircraftItem->getModel()
+            << " | Registration: "
+            << aircraftItem->getRegistrationNumber()
+            << " | Capacity: "
+            << aircraftItem->getCapacity()
+            << " | Available: "
+            << (
+                aircraftItem->isAvailable()
+                    ? "Yes"
+                    : "No"
+            )
+            << "\n";
+    }
+
+    std::cout << "\n";
+
+    std::string flightNumber;
+    std::string origin;
+    std::string destination;
+    std::string departureTime;
+    std::string arrivalTime;
+
+    double price;
+    int aircraftId;
+    int duration;
+
+    std::cout
+        << "Flight Number: ";
+    std::getline(
+        std::cin,
+        flightNumber
+    );
+
+    std::cout
+        << "Origin: ";
+    std::getline(
+        std::cin,
+        origin
+    );
+
+    std::cout
+        << "Destination: ";
+    std::getline(
+        std::cin,
+        destination
+    );
+
+    std::cout
+        << "Departure Time (YYYY-MM-DD HH:MM): ";
+    std::getline(
+        std::cin,
+        departureTime
+    );
+
+    std::cout
+        << "Arrival Time (YYYY-MM-DD HH:MM): ";
+    std::getline(
+        std::cin,
+        arrivalTime
+    );
+
+    std::cout
+        << "Price: ";
+
+    if (!(std::cin >> price))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid price.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Aircraft ID: ";
+
+    if (!(std::cin >> aircraftId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid aircraft ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Flight Duration (hours): ";
+
+    if (!(std::cin >> duration))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid duration.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    try
+    {
+        std::shared_ptr<Aircraft> selectedAircraft;
+
+        for (const auto& aircraftItem : aircraft)
+        {
+            if (aircraftItem &&
+                aircraftItem->getId() == aircraftId)
+            {
+                selectedAircraft = aircraftItem;
+                break;
+            }
+        }
+
+        if (!selectedAircraft)
+        {
+            throw std::runtime_error(
+                "Aircraft not found."
+            );
+        }
+
+        if (!selectedAircraft->isAvailable())
+        {
+            throw std::runtime_error(
+                "Selected aircraft is not available."
+            );
+        }
+
+        for (const auto& existingFlight : flights)
+        {
+            if (existingFlight &&
+                existingFlight->getFlightNumber()
+                    == flightNumber)
+            {
+                throw std::runtime_error(
+                    "Flight number already exists."
+                );
+            }
+        }
+
+        auto flight =
+            std::make_shared<Flight>(
+                flightNumber,
+                origin,
+                destination,
+                departureTime,
+                arrivalTime,
+                price,
+                selectedAircraft,
+                duration
+            );
+
+        flights.push_back(flight);
+
+        FlightRepository flightRepository;
+
+        flightRepository.save(flights);
+
+        std::cout
+            << "\nFlight created successfully!\n";
+
+        pause();
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to create flight.\n"
+            << e.what()
+            << "\n";
+
+        pause();
+    }
+}
+
+// ============================================================
+// UPDATE FLIGHT
+// ============================================================
+
+void ConsoleUI::updateFlight()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "             Update Flight\n"
+        << "=====================================\n\n";
+
+    if (flights.empty())
+    {
+        std::cout
+            << "No flights found.\n";
+
+        pause();
+        return;
+    }
+
+    std::string flightNumber;
+
+    std::cout
+        << "Enter Flight Number: ";
+
+    std::getline(
+        std::cin,
+        flightNumber
+    );
+
+    std::shared_ptr<Flight> flight;
+
+    for (const auto& flightItem : flights)
+    {
+        if (flightItem &&
+            flightItem->getFlightNumber()
+                == flightNumber)
+        {
+            flight = flightItem;
+            break;
+        }
+    }
+
+    if (!flight)
+    {
+        std::cout
+            << "\nFlight not found.\n";
+
+        pause();
+        return;
+    }
+
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "             Update Flight\n"
+            << "=====================================\n\n"
+            << "Flight: "
+            << flight->getFlightNumber()
+            << "\n\n"
+            << "1. Update Price\n"
+            << "2. Change Aircraft\n"
+            << "3. Back\n\n"
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        if (choice == 1)
+        {
+            double newPrice;
+
+            std::cout
+                << "\nCurrent Price: "
+                << flight->getPrice()
+                << "\n";
+
+            std::cout
+                << "New Price: ";
+
+            if (!(std::cin >> newPrice))
+            {
+                std::cin.clear();
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                std::cout
+                    << "\nInvalid price.\n";
+
+                pause();
+                continue;
+            }
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            try
+            {
+                flight->setPrice(newPrice);
+
+                FlightRepository flightRepository;
+
+                flightRepository.save(flights);
+
+                std::cout
+                    << "\nPrice updated successfully.\n";
+
+                pause();
+            }
+            catch (const std::exception& e)
+            {
+                std::cout
+                    << "\nFailed to update price.\n"
+                    << e.what()
+                    << "\n";
+
+                pause();
+            }
+        }
+        else if (choice == 2)
+        {
+            if (aircraft.empty())
+            {
+                std::cout
+                    << "\nNo aircraft available.\n";
+
+                pause();
+                continue;
+            }
+
+            std::cout
+                << "\nAvailable Aircraft:\n\n";
+
+            for (const auto& aircraftItem : aircraft)
+            {
+                if (!aircraftItem)
+                {
+                    continue;
+                }
+
+                std::cout
+                    << "ID: "
+                    << aircraftItem->getId()
+                    << " | "
+                    << aircraftItem->getManufacturer()
+                    << " "
+                    << aircraftItem->getModel()
+                    << " | Registration: "
+                    << aircraftItem->getRegistrationNumber()
+                    << " | Available: "
+                    << (
+                        aircraftItem->isAvailable()
+                            ? "Yes"
+                            : "No"
+                    )
+                    << "\n";
+            }
+
+            int aircraftId;
+
+            std::cout
+                << "\nNew Aircraft ID: ";
+
+            if (!(std::cin >> aircraftId))
+            {
+                std::cin.clear();
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                std::cout
+                    << "\nInvalid aircraft ID.\n";
+
+                pause();
+                continue;
+            }
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::shared_ptr<Aircraft> selectedAircraft;
+
+            for (const auto& aircraftItem : aircraft)
+            {
+                if (aircraftItem &&
+                    aircraftItem->getId() == aircraftId)
+                {
+                    selectedAircraft = aircraftItem;
+                    break;
+                }
+            }
+
+            if (!selectedAircraft)
+            {
+                std::cout
+                    << "\nAircraft not found.\n";
+
+                pause();
+                continue;
+            }
+
+            if (!selectedAircraft->isAvailable())
+            {
+                std::cout
+                    << "\nSelected aircraft is not available.\n";
+
+                pause();
+                continue;
+            }
+
+            try
+            {
+                flight->setAircraft(
+                    selectedAircraft
+                );
+
+                FlightRepository flightRepository;
+
+                flightRepository.save(flights);
+
+                std::cout
+                    << "\nAircraft updated successfully.\n";
+
+                pause();
+            }
+            catch (const std::exception& e)
+            {
+                std::cout
+                    << "\nFailed to update aircraft.\n"
+                    << e.what()
+                    << "\n";
+
+                pause();
+            }
+        }
+        else if (choice == 3)
+        {
+            return;
+        }
+        else
+        {
+            std::cout
+                << "\nInvalid option.\n";
+
+            pause();
+        }
+    }
+}
+
+// ============================================================
+// DELETE FLIGHT
+// ============================================================
+
+void ConsoleUI::deleteFlight()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "             Delete Flight\n"
+        << "=====================================\n\n";
+
+    if (flights.empty())
+    {
+        std::cout
+            << "No flights found.\n";
+
+        pause();
+        return;
+    }
+
+    std::string flightNumber;
+
+    std::cout
+        << "Enter Flight Number: ";
+
+    std::getline(
+        std::cin,
+        flightNumber
+    );
+
+    auto flightIt =
+        std::find_if(
+            flights.begin(),
+            flights.end(),
+            [&flightNumber](
+                const std::shared_ptr<Flight>& flight
+            )
+            {
+                return flight &&
+                       flight->getFlightNumber()
+                           == flightNumber;
+            }
+        );
+
+    if (flightIt == flights.end())
+    {
+        std::cout
+            << "\nFlight not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight = *flightIt;
+
+    std::cout
+        << "\nFlight: "
+        << flight->getFlightNumber()
+        << "\n"
+        << "From: "
+        << flight->getOrigin()
+        << "\n"
+        << "To: "
+        << flight->getDestination()
+        << "\n"
+        << "Status: "
+        << flightStatusToString(
+            flight->getStatus()
+        )
+        << "\n";
+
+    std::cout
+        << "\nAre you sure you want to delete this flight?\n"
+        << "1. Yes\n"
+        << "2. No\n"
+        << "Choose: ";
+
+    int confirmation;
+
+    if (!(std::cin >> confirmation))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid input.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (confirmation != 1)
+    {
+        std::cout
+            << "\nDeletion cancelled.\n";
+
+        pause();
+        return;
+    }
+
+    flights.erase(flightIt);
+
+    try
+    {
+        FlightRepository flightRepository;
+
+        flightRepository.save(flights);
+
+        std::cout
+            << "\nFlight deleted successfully.\n";
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to save flight data.\n"
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+// ============================================================
+// SEARCH FLIGHTS
+// ============================================================
+
+void ConsoleUI::searchFlights() const
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "            Search Flights\n"
+        << "=====================================\n\n"
+        << "1. Search by Destination\n"
+        << "2. Search by Date\n"
+        << "3. Search by Maximum Price\n"
+        << "4. Combined Search\n"
+        << "5. Back\n\n"
+        << "Choose an option: ";
+
+    int choice;
+
+    if (!(std::cin >> choice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid input.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    FlightSearchService searchService;
+
+    std::vector<std::shared_ptr<Flight>> results;
+
+    try
+    {
+        switch (choice)
+        {
+            case 1:
+            {
+                std::string destination;
+
+                std::cout
+                    << "\nDestination: ";
+
+                std::getline(
+                    std::cin,
+                    destination
+                );
+
+                results =
+                    searchService.searchByDestination(
+                        flights,
+                        destination
+                    );
+
+                break;
+            }
+
+            case 2:
+            {
+                std::string date;
+
+                std::cout
+                    << "\nDate (YYYY-MM-DD): ";
+
+                std::getline(
+                    std::cin,
+                    date
+                );
+
+                results =
+                    searchService.searchByDate(
+                        flights,
+                        date
+                    );
+
+                break;
+            }
+
+            case 3:
+            {
+                double maximumPrice;
+
+                std::cout
+                    << "\nMaximum Price: ";
+
+                if (!(std::cin >> maximumPrice))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid price.\n";
+
+                    pause();
+                    return;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                results =
+                    searchService.searchByMaximumPrice(
+                        flights,
+                        maximumPrice
+                    );
+
+                break;
+            }
+
+            case 4:
+            {
+                std::string destination;
+                std::string date;
+                double maximumPrice;
+
+                std::cout
+                    << "\nDestination: ";
+
+                std::getline(
+                    std::cin,
+                    destination
+                );
+
+                std::cout
+                    << "Date (YYYY-MM-DD): ";
+
+                std::getline(
+                    std::cin,
+                    date
+                );
+
+                std::cout
+                    << "Maximum Price: ";
+
+                if (!(std::cin >> maximumPrice))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid price.\n";
+
+                    pause();
+                    return;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                results =
+                    searchService.search(
+                        flights,
+                        destination,
+                        date,
+                        maximumPrice
+                    );
+
+                break;
+            }
+
+            case 5:
+                return;
+
+            default:
+                std::cout
+                    << "\nInvalid option.\n";
+
+                pause();
+                return;
+        }
+
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "          Search Results\n"
+            << "=====================================\n\n";
+
+        if (results.empty())
+        {
+            std::cout
+                << "No matching flights found.\n";
+
+            pause();
+            return;
+        }
+
+        for (const auto& flight : results)
+        {
+            if (!flight)
+            {
+                continue;
+            }
+
+            std::cout
+                << "-------------------------------------\n"
+                << "Flight Number : "
+                << flight->getFlightNumber()
+                << "\n"
+                << "From          : "
+                << flight->getOrigin()
+                << "\n"
+                << "To            : "
+                << flight->getDestination()
+                << "\n"
+                << "Departure     : "
+                << flight->getDepartureTime()
+                << "\n"
+                << "Arrival       : "
+                << flight->getArrivalTime()
+                << "\n"
+                << "Price         : "
+                << flight->getPrice()
+                << "\n"
+                << "Status        : "
+                << flightStatusToString(
+                    flight->getStatus()
+                )
+                << "\n";
+        }
+
+        std::cout
+            << "-------------------------------------\n";
+
+        pause();
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nSearch failed.\n"
+            << e.what()
+            << "\n";
+
+        pause();
+    }
+}
+
+// ============================================================
+// CHANGE FLIGHT STATUS
+// ============================================================
+
+void ConsoleUI::changeFlightStatus()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "         Change Flight Status\n"
+        << "=====================================\n\n";
+
+    if (flights.empty())
+    {
+        std::cout
+            << "No flights found.\n";
+
+        pause();
+        return;
+    }
+
+    std::string flightNumber;
+
+    std::cout
+        << "Flight Number: ";
+
+    std::getline(
+        std::cin,
+        flightNumber
+    );
+
+    std::shared_ptr<Flight> flight;
+
+    for (const auto& flightItem : flights)
+    {
+        if (flightItem &&
+            flightItem->getFlightNumber()
+                == flightNumber)
+        {
+            flight = flightItem;
+            break;
+        }
+    }
+
+    if (!flight)
+    {
+        std::cout
+            << "\nFlight not found.\n";
+
+        pause();
+        return;
+    }
+
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "         Change Flight Status\n"
+        << "=====================================\n\n"
+        << "Flight: "
+        << flight->getFlightNumber()
+        << "\n"
+        << "Current Status: "
+        << flightStatusToString(
+            flight->getStatus()
+        )
+        << "\n\n"
+        << "1. Start Boarding\n"
+        << "2. Delay Flight\n"
+        << "3. Cancel Flight\n"
+        << "4. Depart Flight\n"
+        << "5. Complete Flight\n"
+        << "6. Back\n\n"
+        << "Choose an option: ";
+
+    int choice;
+
+    if (!(std::cin >> choice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid input.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (choice == 6)
+    {
+        return;
+    }
+
+    try
+    {
+        FlightOperationsService operationsService;
+
+        switch (choice)
+        {
+            case 1:
+                operationsService.startBoarding(
+                    flight
+                );
+                break;
+
+            case 2:
+                operationsService.delayFlight(
+                    flight
+                );
+                break;
+
+            case 3:
+                operationsService.cancelFlight(
+                    flight
+                );
+                break;
+
+            case 4:
+                operationsService.departFlight(
+                    flight
+                );
+                break;
+
+            case 5:
+                operationsService.completeFlight(
+                    flight
+                );
+                break;
+
+            default:
+                std::cout
+                    << "\nInvalid option.\n";
+
+                pause();
+                return;
+        }
+
+        FlightRepository flightRepository;
+
+        flightRepository.save(flights);
+
+        std::cout
+            << "\nFlight status updated successfully.\n"
+            << "New Status: "
+            << flightStatusToString(
+                flight->getStatus()
+            )
+            << "\n";
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to change flight status.\n"
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+// ============================================================
+// FLIGHT STATUS TO STRING
+// ============================================================
+
+std::string ConsoleUI::flightStatusToString(
+    FlightStatus status
+) const
+{
+    switch (status)
+    {
+        case FlightStatus::Scheduled:
+            return "Scheduled";
+
+        case FlightStatus::Boarding:
+            return "Boarding";
+
+        case FlightStatus::Departed:
+            return "Departed";
+
+        case FlightStatus::Delayed:
+            return "Delayed";
+
+        case FlightStatus::Cancelled:
+            return "Cancelled";
+
+        case FlightStatus::Completed:
+            return "Completed";
+    }
+
+    return "Unknown";
+}
+
+// ============================================================
+// AIRCRAFT STATUS TO STRING
+// ============================================================
+
+std::string aircraftStatusToString(
+    AircraftStatus status
+)
+{
+    switch (status)
+    {
+        case AircraftStatus::Available:
+            return "Available";
+
+        case AircraftStatus::InFlight:
+            return "In Flight";
+
+        case AircraftStatus::Maintenance:
+            return "Maintenance";
+
+        case AircraftStatus::Unavailable:
+            return "Unavailable";
+    }
+
+    return "Unknown";
+}
+
+// ============================================================
+// AIRCRAFT - LIST
+// ============================================================
+
+void ConsoleUI::listAircraft() const
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "              ALL AIRCRAFT\n"
+        << "========================================\n\n";
+
+    if (aircraft.empty())
+    {
+        std::cout
+            << "No aircraft found.\n";
+
+        pause();
+        return;
+    }
+
+    for (const auto& currentAircraft : aircraft)
+    {
+        if (!currentAircraft)
+        {
+            continue;
+        }
+
+        std::cout
+            << "----------------------------------------\n"
+            << "ID                    : "
+            << currentAircraft->getId()
+            << "\n"
+            << "Registration Number   : "
+            << currentAircraft->getRegistrationNumber()
+            << "\n"
+            << "Manufacturer          : "
+            << currentAircraft->getManufacturer()
+            << "\n"
+            << "Model                 : "
+            << currentAircraft->getModel()
+            << "\n"
+            << "Capacity              : "
+            << currentAircraft->getCapacity()
+            << " seats\n"
+            << "Status                : "
+            << aircraftStatusToString(
+                   currentAircraft->getStatus()
+               )
+            << "\n"
+            << "Next Maintenance Date : "
+            << (
+                   currentAircraft->getNextMaintenanceDate().empty()
+                       ? "Not Scheduled"
+                       : currentAircraft->getNextMaintenanceDate()
+               )
+            << "\n";
+    }
+
+    std::cout
+        << "----------------------------------------\n";
+
+    pause();
+}
+
+// ============================================================
+// AIRCRAFT - CREATE
+// ============================================================
+
+void ConsoleUI::createAircraft()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "             ADD AIRCRAFT\n"
+        << "========================================\n\n";
+
+    try
+    {
+        std::string registrationNumber;
+        std::string manufacturer;
+        std::string model;
+        std::string nextMaintenanceDate;
+        int capacity;
+
+        std::cout
+            << "Registration Number: ";
+
+        std::getline(
+            std::cin,
+            registrationNumber
+        );
+
+        if (registrationNumber.empty())
+        {
+            throw std::invalid_argument(
+                "Registration number cannot be empty."
+            );
+        }
+
+        auto duplicateIt =
+            std::find_if(
+                aircraft.begin(),
+                aircraft.end(),
+                [&registrationNumber](
+                    const std::shared_ptr<Aircraft>& currentAircraft
+                )
+                {
+                    return currentAircraft &&
+                           currentAircraft->getRegistrationNumber()
+                               == registrationNumber;
+                }
+            );
+
+        if (duplicateIt != aircraft.end())
+        {
+            throw std::invalid_argument(
+                "An aircraft with this registration number already exists."
+            );
+        }
+
+        std::cout
+            << "Manufacturer: ";
+
+        std::getline(
+            std::cin,
+            manufacturer
+        );
+
+        std::cout
+            << "Model: ";
+
+        std::getline(
+            std::cin,
+            model
+        );
+
+        std::cout
+            << "Capacity: ";
+
+        std::cin >> capacity;
+
+        if (std::cin.fail())
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            throw std::invalid_argument(
+                "Capacity must be a valid number."
+            );
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "Next Maintenance Date "
+            << "(leave empty if not scheduled): ";
+
+        std::getline(
+            std::cin,
+            nextMaintenanceDate
+        );
+
+        int nextId = 1;
+
+        for (const auto& currentAircraft : aircraft)
+        {
+            if (currentAircraft)
+            {
+                nextId =
+                    std::max(
+                        nextId,
+                        currentAircraft->getId() + 1
+                    );
+            }
+        }
+
+        auto newAircraft =
+            std::make_shared<Aircraft>(
+                nextId,
+                registrationNumber,
+                manufacturer,
+                model,
+                capacity,
+                AircraftStatus::Available,
+                nextMaintenanceDate
+            );
+
+        aircraft.push_back(
+            newAircraft
+        );
+
+        AircraftRepository repository;
+
+        repository.save(
+            aircraft
+        );
+
+        std::cout
+            << "\nAircraft created successfully.\n"
+            << "Assigned ID: "
+            << newAircraft->getId()
+            << "\n";
+
+        pause();
+    }
+    catch (const std::exception& ex)
+    {
+        std::cout
+            << "\nFailed to create aircraft: "
+            << ex.what()
+            << "\n";
+
+        pause();
+    }
+}
+
+// ============================================================
+// AIRCRAFT - UPDATE
+// ============================================================
+
+void ConsoleUI::updateAircraft()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "            UPDATE AIRCRAFT\n"
+        << "========================================\n\n";
+
+    if (aircraft.empty())
+    {
+        std::cout
+            << "No aircraft found.\n";
+
+        pause();
+        return;
+    }
+
+    int aircraftId;
+
+    std::cout
+        << "Enter Aircraft ID: ";
+
+    std::cin >> aircraftId;
+
+    if (std::cin.fail())
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid Aircraft ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto aircraftIt =
+        std::find_if(
+            aircraft.begin(),
+            aircraft.end(),
+            [aircraftId](
+                const std::shared_ptr<Aircraft>& currentAircraft
+            )
+            {
+                return currentAircraft &&
+                       currentAircraft->getId()
+                           == aircraftId;
+            }
+        );
+
+    if (aircraftIt == aircraft.end())
+    {
+        std::cout
+            << "\nAircraft not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto currentAircraft = *aircraftIt;
+
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "========================================\n"
+            << "            UPDATE AIRCRAFT\n"
+            << "========================================\n\n"
+            << "Aircraft ID          : "
+            << currentAircraft->getId()
+            << "\n"
+            << "Registration Number  : "
+            << currentAircraft->getRegistrationNumber()
+            << "\n"
+            << "Manufacturer         : "
+            << currentAircraft->getManufacturer()
+            << "\n"
+            << "Model                : "
+            << currentAircraft->getModel()
+            << "\n"
+            << "Capacity             : "
+            << currentAircraft->getCapacity()
+            << "\n"
+            << "Current Status       : "
+            << aircraftStatusToString(
+                   currentAircraft->getStatus()
+               )
+            << "\n"
+            << "Maintenance Date     : "
+            << (
+                   currentAircraft->getNextMaintenanceDate().empty()
+                       ? "Not Scheduled"
+                       : currentAircraft->getNextMaintenanceDate()
+               )
+            << "\n\n"
+            << "1. Update Status\n"
+            << "2. Update Maintenance Date\n"
+            << "3. Back\n"
+            << "========================================\n";
+
+        int choice;
+
+        std::cout
+            << "Enter your choice: ";
+
+        std::cin >> choice;
+
+        if (std::cin.fail())
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid choice.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        if (choice == 1)
+        {
+            std::cout
+                << "\nSelect New Status:\n"
+                << "1. Available\n"
+                << "2. In Flight\n"
+                << "3. Maintenance\n"
+                << "4. Unavailable\n";
+
+            int statusChoice;
+
+            std::cout
+                << "Enter choice: ";
+
+            std::cin >> statusChoice;
+
+            if (std::cin.fail())
+            {
+                std::cin.clear();
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                std::cout
+                    << "\nInvalid status.\n";
+
+                pause();
+                continue;
+            }
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            AircraftStatus newStatus;
+
+            switch (statusChoice)
+            {
+                case 1:
+                    newStatus = AircraftStatus::Available;
+                    break;
+
+                case 2:
+                    newStatus = AircraftStatus::InFlight;
+                    break;
+
+                case 3:
+                    newStatus = AircraftStatus::Maintenance;
+                    break;
+
+                case 4:
+                    newStatus = AircraftStatus::Unavailable;
+                    break;
+
+                default:
+                    std::cout
+                        << "\nInvalid status choice.\n";
+
+                    pause();
+                    continue;
+            }
+
+            currentAircraft->setStatus(
+                newStatus
+            );
+
+            AircraftRepository repository;
+
+            repository.save(
+                aircraft
+            );
+
+            std::cout
+                << "\nAircraft status updated successfully.\n";
+
+            pause();
+        }
+        else if (choice == 2)
+        {
+            std::string newDate;
+
+            std::cout
+                << "\nEnter New Maintenance Date "
+                << "(leave empty to clear): ";
+
+            std::getline(
+                std::cin,
+                newDate
+            );
+
+            currentAircraft->setNextMaintenanceDate(
+                newDate
+            );
+
+            AircraftRepository repository;
+
+            repository.save(
+                aircraft
+            );
+
+            std::cout
+                << "\nMaintenance date updated successfully.\n";
+
+            pause();
+        }
+        else if (choice == 3)
+        {
+            return;
+        }
+        else
+        {
+            std::cout
+                << "\nInvalid choice.\n";
+
+            pause();
+        }
+    }
+}
+
+// ============================================================
+// AIRCRAFT - DELETE
+// ============================================================
+
+void ConsoleUI::deleteAircraft()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "            DELETE AIRCRAFT\n"
+        << "========================================\n\n";
+
+    if (aircraft.empty())
+    {
+        std::cout
+            << "No aircraft found.\n";
+
+        pause();
+        return;
+    }
+
+    int aircraftId;
+
+    std::cout
+        << "Enter Aircraft ID: ";
+
+    std::cin >> aircraftId;
+
+    if (std::cin.fail())
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid Aircraft ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto aircraftIt =
+        std::find_if(
+            aircraft.begin(),
+            aircraft.end(),
+            [aircraftId](
+                const std::shared_ptr<Aircraft>& currentAircraft
+            )
+            {
+                return currentAircraft &&
+                       currentAircraft->getId()
+                           == aircraftId;
+            }
+        );
+
+    if (aircraftIt == aircraft.end())
+    {
+        std::cout
+            << "\nAircraft not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto currentAircraft = *aircraftIt;
+
+    auto flightIt =
+        std::find_if(
+            flights.begin(),
+            flights.end(),
+            [aircraftId](
+                const std::shared_ptr<Flight>& currentFlight
+            )
+            {
+                if (!currentFlight)
+                {
+                    return false;
+                }
+
+                auto assignedAircraft =
+                    currentFlight->getAircraft();
+
+                return assignedAircraft &&
+                       assignedAircraft->getId()
+                           == aircraftId;
+            }
+        );
+
+    if (flightIt != flights.end())
+    {
+        std::cout
+            << "\nCannot delete this aircraft.\n"
+            << "It is currently assigned to a flight.\n"
+            << "Flight Number: "
+            << (*flightIt)->getFlightNumber()
+            << "\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "\nAircraft:\n"
+        << "ID                   : "
+        << currentAircraft->getId()
+        << "\n"
+        << "Registration Number  : "
+        << currentAircraft->getRegistrationNumber()
+        << "\n"
+        << "Manufacturer         : "
+        << currentAircraft->getManufacturer()
+        << "\n"
+        << "Model                : "
+        << currentAircraft->getModel()
+        << "\n\n";
+
+    std::cout
+        << "Are you sure you want to delete this aircraft?\n"
+        << "Enter Y to confirm or N to cancel: ";
+
+    char confirmation;
+
+    std::cin >> confirmation;
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (confirmation != 'Y' &&
+        confirmation != 'y')
+    {
+        std::cout
+            << "\nDeletion cancelled.\n";
+
+        pause();
+        return;
+    }
+
+    aircraft.erase(
+        aircraftIt
+    );
+
+    AircraftRepository repository;
+
+    repository.save(
+        aircraft
+    );
+
+    std::cout
+        << "\nAircraft deleted successfully.\n";
+
+    pause();
+}
+
+// ============================================================
+// AIRCRAFT - CHANGE STATUS
+// ============================================================
+
+void ConsoleUI::changeAircraftStatus()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "         CHANGE AIRCRAFT STATUS\n"
+        << "========================================\n\n";
+
+    if (aircraft.empty())
+    {
+        std::cout
+            << "No aircraft found.\n";
+
+        pause();
+        return;
+    }
+
+    int aircraftId;
+
+    std::cout
+        << "Enter Aircraft ID: ";
+
+    std::cin >> aircraftId;
+
+    if (std::cin.fail())
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid Aircraft ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto aircraftIt =
+        std::find_if(
+            aircraft.begin(),
+            aircraft.end(),
+            [aircraftId](
+                const std::shared_ptr<Aircraft>& currentAircraft
+            )
+            {
+                return currentAircraft &&
+                       currentAircraft->getId()
+                           == aircraftId;
+            }
+        );
+
+    if (aircraftIt == aircraft.end())
+    {
+        std::cout
+            << "\nAircraft not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto currentAircraft = *aircraftIt;
+
+    std::cout
+        << "\nAircraft: "
+        << currentAircraft->getRegistrationNumber()
+        << "\n"
+        << "Current Status: "
+        << aircraftStatusToString(
+               currentAircraft->getStatus()
+           )
+        << "\n\n"
+        << "1. Available\n"
+        << "2. In Flight\n"
+        << "3. Maintenance\n"
+        << "4. Unavailable\n"
+        << "5. Cancel\n"
+        << "========================================\n";
+
+    int statusChoice;
+
+    std::cout
+        << "Enter your choice: ";
+
+    std::cin >> statusChoice;
+
+    if (std::cin.fail())
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid choice.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    AircraftStatus newStatus;
+
+    switch (statusChoice)
+    {
+        case 1:
+            newStatus = AircraftStatus::Available;
+            break;
+
+        case 2:
+            newStatus = AircraftStatus::InFlight;
+            break;
+
+        case 3:
+            newStatus = AircraftStatus::Maintenance;
+            break;
+
+        case 4:
+            newStatus = AircraftStatus::Unavailable;
+            break;
+
+        case 5:
+            return;
+
+        default:
+            std::cout
+                << "\nInvalid status choice.\n";
+
+            pause();
+            return;
+    }
+
+    currentAircraft->setStatus(
+        newStatus
+    );
+
+    AircraftRepository repository;
+
+    repository.save(
+        aircraft
+    );
+
+    std::cout
+        << "\nAircraft status changed successfully.\n"
+        << "New Status: "
+        << aircraftStatusToString(
+               currentAircraft->getStatus()
+           )
+        << "\n";
+
+    pause();
+}
+
+// ============================================================
+// AIRCRAFT MANAGEMENT
+// ============================================================
+
+void ConsoleUI::manageAircraft()
+{
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "========================================\n"
+            << "          AIRCRAFT MANAGEMENT\n"
+            << "========================================\n"
+            << "1. List All Aircraft\n"
+            << "2. Add Aircraft\n"
+            << "3. Update Aircraft\n"
+            << "4. Delete Aircraft\n"
+            << "5. Change Aircraft Status\n"
+            << "6. Back\n"
+            << "========================================\n";
+
+        int choice;
+
+        std::cout
+            << "Enter your choice: ";
+
+        std::cin >> choice;
+
+        if (std::cin.fail())
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid choice.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            case 1:
+                listAircraft();
+                break;
+
+            case 2:
+                createAircraft();
+                break;
+
+            case 3:
+                updateAircraft();
+                break;
+
+            case 4:
+                deleteAircraft();
+                break;
+
+            case 5:
+                changeAircraftStatus();
+                break;
+
+            case 6:
+                return;
+
+            default:
+                std::cout
+                    << "\nInvalid choice.\n";
+
+                pause();
+                break;
+        }
+    }
+}
+
+// ============================================================
+// CREW MANAGEMENT
+// ============================================================
+
+void ConsoleUI::manageCrew()
+{
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "========================================\n"
+            << "             CREW MANAGEMENT\n"
+            << "========================================\n"
+            << "1. List All Crew Members\n"
+            << "2. Add Crew Member\n"
+            << "3. Update Crew Member\n"
+            << "4. Delete Crew Member\n"
+            << "5. Change Crew Status\n"
+            << "6. Assign Crew to Flight\n"
+            << "7. Remove Crew from Flight\n"
+            << "8. Back\n"
+            << "========================================\n";
+
+        int choice;
+
+        std::cout
+            << "Enter your choice: ";
+
+        std::cin >> choice;
+
+        if (std::cin.fail())
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid choice.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            case 1:
+                listCrewMembers();
+                break;
+
+            case 2:
+                createCrewMember();
+                break;
+
+            case 3:
+                updateCrewMember();
+                break;
+
+            case 4:
+                deleteCrewMember();
+                break;
+
+            case 5:
+                changeCrewStatus();
+                break;
+
+            case 6:
+                assignCrewToFlight();
+                break;
+
+            case 7:
+                removeCrewFromFlight();
+                break;
+
+            case 8:
+                return;
+
+            default:
+                std::cout
+                    << "\nInvalid choice.\n";
+
+                pause();
+                break;
+        }
+    }
+}
+
+// ============================================================
+// CREW - LIST
+// ============================================================
+
+void ConsoleUI::listCrewMembers() const
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "          ALL CREW MEMBERS\n"
+        << "========================================\n\n";
+
+    if (crewMembers.empty())
+    {
+        std::cout
+            << "No crew members found.\n";
+
+        pause();
+        return;
+    }
+
+    for (const auto& crewMember : crewMembers)
+    {
+        if (!crewMember)
+        {
+            continue;
+        }
+
+        std::cout
+            << "----------------------------------------\n"
+            << "ID                   : "
+            << crewMember->getId()
+            << "\n"
+            << "Employee ID          : "
+            << crewMember->getEmployeeId()
+            << "\n"
+            << "Full Name            : "
+            << crewMember->getFullName()
+            << "\n"
+            << "Role                 : "
+            << crewMember->getCrewRole()
+            << "\n"
+            << "Total Flight Hours   : "
+            << crewMember->getTotalFlightHours()
+            << "\n"
+            << "Maximum Flight Hours : "
+            << crewMember->getMaximumFlightHours()
+            << "\n"
+            << "Status               : "
+            << (
+                crewMember->getIsActive()
+                    ? "Active"
+                    : "Inactive"
+            )
+            << "\n";
+
+        auto pilot =
+            std::dynamic_pointer_cast<Pilot>(
+                crewMember
+            );
+
+        if (pilot)
+        {
+            std::cout
+                << "License Number       : "
+                << pilot->getLicenseNumber()
+                << "\n";
+        }
+
+        std::cout
+            << "Assigned Flights     : ";
+
+        bool hasAssignedFlight = false;
+
+        for (const auto& flight : flights)
+        {
+            if (!flight)
+            {
+                continue;
+            }
+
+            const auto& assignedCrew =
+                flight->getCrewMembers();
+
+            auto crewIt =
+                std::find_if(
+                    assignedCrew.begin(),
+                    assignedCrew.end(),
+                    [&crewMember](
+                        const std::shared_ptr<CrewMember>& member
+                    )
+                    {
+                        return member &&
+                               member->getId()
+                                   == crewMember->getId();
+                    }
+                );
+
+            if (crewIt != assignedCrew.end())
+            {
+                if (hasAssignedFlight)
+                {
+                    std::cout
+                        << ", ";
+                }
+
+                std::cout
+                    << flight->getFlightNumber();
+
+                hasAssignedFlight = true;
+            }
+        }
+
+        if (!hasAssignedFlight)
+        {
+            std::cout
+                << "None";
+        }
+
+        std::cout
+            << "\n";
+    }
+
+    std::cout
+        << "----------------------------------------\n";
+
+    pause();
+}
+
+// ============================================================
+// CREW - CREATE
+// ============================================================
+
+void ConsoleUI::createCrewMember()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "           ADD CREW MEMBER\n"
+        << "========================================\n\n";
+
+    try
+    {
+        std::cout
+            << "Select Crew Role:\n"
+            << "1. Pilot\n"
+            << "2. Flight Attendant\n"
+            << "3. Cancel\n\n"
+            << "Choose: ";
+
+        int roleChoice;
+
+        if (!(std::cin >> roleChoice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            throw std::invalid_argument(
+                "Invalid role choice."
+            );
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        if (roleChoice == 3)
+        {
+            return;
+        }
+
+        if (roleChoice != 1 &&
+            roleChoice != 2)
+        {
+            throw std::invalid_argument(
+                "Invalid role choice."
+            );
+        }
+
+        std::string employeeId;
+        std::string fullName;
+        std::string licenseNumber;
+        int maximumFlightHours;
+
+        std::cout
+            << "\nEmployee ID: ";
+
+        std::getline(
+            std::cin,
+            employeeId
+        );
+
+        if (employeeId.empty())
+        {
+            throw std::invalid_argument(
+                "Employee ID cannot be empty."
+            );
+        }
+
+        auto duplicateEmployee =
+            std::find_if(
+                crewMembers.begin(),
+                crewMembers.end(),
+                [&employeeId](
+                    const std::shared_ptr<CrewMember>& member
+                )
+                {
+                    return member &&
+                           member->getEmployeeId()
+                               == employeeId;
+                }
+            );
+
+        if (duplicateEmployee != crewMembers.end())
+        {
+            throw std::invalid_argument(
+                "A crew member with this Employee ID already exists."
+            );
+        }
+
+        std::cout
+            << "Full Name: ";
+
+        std::getline(
+            std::cin,
+            fullName
+        );
+
+        if (fullName.empty())
+        {
+            throw std::invalid_argument(
+                "Full name cannot be empty."
+            );
+        }
+
+        std::cout
+            << "Maximum Flight Hours: ";
+
+        if (!(std::cin >> maximumFlightHours))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            throw std::invalid_argument(
+                "Maximum flight hours must be a valid number."
+            );
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        if (maximumFlightHours <= 0)
+        {
+            throw std::invalid_argument(
+                "Maximum flight hours must be positive."
+            );
+        }
+
+        if (roleChoice == 1)
+        {
+            std::cout
+                << "License Number: ";
+
+            std::getline(
+                std::cin,
+                licenseNumber
+            );
+
+            if (licenseNumber.empty())
+            {
+                throw std::invalid_argument(
+                    "Pilot license number cannot be empty."
+                );
+            }
+
+            auto pilot =
+                std::make_shared<Pilot>(
+                    1,
+                    employeeId,
+                    fullName,
+                    maximumFlightHours,
+                    licenseNumber
+                );
+
+            int nextId = 1;
+
+            for (const auto& member : crewMembers)
+            {
+                if (member)
+                {
+                    nextId =
+                        std::max(
+                            nextId,
+                            member->getId() + 1
+                        );
+                }
+            }
+
+            pilot =
+                std::make_shared<Pilot>(
+                    nextId,
+                    employeeId,
+                    fullName,
+                    maximumFlightHours,
+                    licenseNumber
+                );
+
+            crewMembers.push_back(
+                pilot
+            );
+
+            CrewRepository repository;
+
+            repository.save(
+                crewMembers
+            );
+
+            std::cout
+                << "\nPilot created successfully.\n"
+                << "Assigned ID: "
+                << pilot->getId()
+                << "\n";
+        }
+        else
+        {
+            int nextId = 1;
+
+            for (const auto& member : crewMembers)
+            {
+                if (member)
+                {
+                    nextId =
+                        std::max(
+                            nextId,
+                            member->getId() + 1
+                        );
+                }
+            }
+
+            auto flightAttendant =
+                std::make_shared<FlightAttendant>(
+                    nextId,
+                    employeeId,
+                    fullName,
+                    maximumFlightHours
+                );
+
+            crewMembers.push_back(
+                flightAttendant
+            );
+
+            CrewRepository repository;
+
+            repository.save(
+                crewMembers
+            );
+
+            std::cout
+                << "\nFlight Attendant created successfully.\n"
+                << "Assigned ID: "
+                << flightAttendant->getId()
+                << "\n";
+        }
+
+        pause();
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to create crew member.\n"
+            << e.what()
+            << "\n";
+
+        pause();
+    }
+}
+
+// ============================================================
+// CREW - UPDATE
+// ============================================================
+
+void ConsoleUI::updateCrewMember()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "           UPDATE CREW MEMBER\n"
+        << "========================================\n\n";
+
+    if (crewMembers.empty())
+    {
+        std::cout
+            << "No crew members found.\n";
+
+        pause();
+        return;
+    }
+
+    int crewId;
+
+    std::cout
+        << "Enter Crew Member ID: ";
+
+    if (!(std::cin >> crewId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid Crew Member ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto crewIt =
+        std::find_if(
+            crewMembers.begin(),
+            crewMembers.end(),
+            [crewId](
+                const std::shared_ptr<CrewMember>& member
+            )
+            {
+                return member &&
+                       member->getId() == crewId;
+            }
+        );
+
+    if (crewIt == crewMembers.end())
+    {
+        std::cout
+            << "\nCrew member not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto crewMember = *crewIt;
+
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "========================================\n"
+            << "           UPDATE CREW MEMBER\n"
+            << "========================================\n\n"
+            << "ID                   : "
+            << crewMember->getId()
+            << "\n"
+            << "Employee ID          : "
+            << crewMember->getEmployeeId()
+            << "\n"
+            << "Full Name            : "
+            << crewMember->getFullName()
+            << "\n"
+            << "Role                 : "
+            << crewMember->getCrewRole()
+            << "\n"
+            << "Total Flight Hours   : "
+            << crewMember->getTotalFlightHours()
+            << "\n"
+            << "Maximum Flight Hours : "
+            << crewMember->getMaximumFlightHours()
+            << "\n"
+            << "Status               : "
+            << (
+                crewMember->getIsActive()
+                    ? "Active"
+                    : "Inactive"
+            )
+            << "\n\n"
+            << "1. Update Full Name\n"
+            << "2. Update Maximum Flight Hours\n"
+            << "3. Back\n\n"
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        try
+        {
+            if (choice == 1)
+            {
+                std::string newName;
+
+                std::cout
+                    << "\nNew Full Name: ";
+
+                std::getline(
+                    std::cin,
+                    newName
+                );
+
+                crewMember->setFullName(
+                    newName
+                );
+
+                CrewRepository repository;
+
+                repository.save(
+                    crewMembers
+                );
+
+                std::cout
+                    << "\nFull name updated successfully.\n";
+
+                pause();
+            }
+            else if (choice == 2)
+            {
+                int newMaximumHours;
+
+                std::cout
+                    << "\nCurrent Maximum Hours: "
+                    << crewMember->getMaximumFlightHours()
+                    << "\n"
+                    << "Current Total Hours: "
+                    << crewMember->getTotalFlightHours()
+                    << "\n"
+                    << "New Maximum Flight Hours: ";
+
+                if (!(std::cin >> newMaximumHours))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    throw std::invalid_argument(
+                        "Maximum flight hours must be a valid number."
+                    );
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                crewMember->setMaximumFlightHours(
+                    newMaximumHours
+                );
+
+                CrewRepository repository;
+
+                repository.save(
+                    crewMembers
+                );
+
+                std::cout
+                    << "\nMaximum flight hours updated successfully.\n";
+
+                pause();
+            }
+            else if (choice == 3)
+            {
+                return;
+            }
+            else
+            {
+                std::cout
+                    << "\nInvalid option.\n";
+
+                pause();
+            }
+        }
+        catch (const std::exception& e)
+        {
+            std::cout
+                << "\nFailed to update crew member.\n"
+                << e.what()
+                << "\n";
+
+            pause();
+        }
+    }
+}
+
+// ============================================================
+// CREW - DELETE
+// ============================================================
+
+void ConsoleUI::deleteCrewMember()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "           DELETE CREW MEMBER\n"
+        << "========================================\n\n";
+
+    if (crewMembers.empty())
+    {
+        std::cout
+            << "No crew members found.\n";
+
+        pause();
+        return;
+    }
+
+    int crewId;
+
+    std::cout
+        << "Enter Crew Member ID: ";
+
+    if (!(std::cin >> crewId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid Crew Member ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto crewIt =
+        std::find_if(
+            crewMembers.begin(),
+            crewMembers.end(),
+            [crewId](
+                const std::shared_ptr<CrewMember>& member
+            )
+            {
+                return member &&
+                       member->getId() == crewId;
+            }
+        );
+
+    if (crewIt == crewMembers.end())
+    {
+        std::cout
+            << "\nCrew member not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto crewMember = *crewIt;
+
+    // Do not allow deletion while assigned to a flight.
+    for (const auto& flight : flights)
+    {
+        if (!flight)
+        {
+            continue;
+        }
+
+        const auto& assignedCrew =
+            flight->getCrewMembers();
+
+        auto assignedIt =
+            std::find_if(
+                assignedCrew.begin(),
+                assignedCrew.end(),
+                [crewId](
+                    const std::shared_ptr<CrewMember>& member
+                )
+                {
+                    return member &&
+                           member->getId() == crewId;
+                }
+            );
+
+        if (assignedIt != assignedCrew.end())
+        {
+            std::cout
+                << "\nCannot delete this crew member.\n"
+                << "They are currently assigned to flight: "
+                << flight->getFlightNumber()
+                << "\n"
+                << "Remove them from the flight first.\n";
+
+            pause();
+            return;
+        }
+    }
+
+    std::cout
+        << "\nCrew Member:\n"
+        << "ID          : "
+        << crewMember->getId()
+        << "\n"
+        << "Employee ID : "
+        << crewMember->getEmployeeId()
+        << "\n"
+        << "Name        : "
+        << crewMember->getFullName()
+        << "\n"
+        << "Role        : "
+        << crewMember->getCrewRole()
+        << "\n";
+
+    std::cout
+        << "\nAre you sure you want to delete this crew member?\n"
+        << "Enter Y to confirm or N to cancel: ";
+
+    char confirmation;
+
+    std::cin >> confirmation;
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (confirmation != 'Y' &&
+        confirmation != 'y')
+    {
+        std::cout
+            << "\nDeletion cancelled.\n";
+
+        pause();
+        return;
+    }
+
+    crewMembers.erase(
+        crewIt
+    );
+
+    try
+    {
+        CrewRepository repository;
+
+        repository.save(
+            crewMembers
+        );
+
+        std::cout
+            << "\nCrew member deleted successfully.\n";
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to save crew data.\n"
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+// ============================================================
+// CREW - CHANGE STATUS
+// ============================================================
+
+void ConsoleUI::changeCrewStatus()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "          CHANGE CREW STATUS\n"
+        << "========================================\n\n";
+
+    if (crewMembers.empty())
+    {
+        std::cout
+            << "No crew members found.\n";
+
+        pause();
+        return;
+    }
+
+    int crewId;
+
+    std::cout
+        << "Enter Crew Member ID: ";
+
+    if (!(std::cin >> crewId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid Crew Member ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto crewIt =
+        std::find_if(
+            crewMembers.begin(),
+            crewMembers.end(),
+            [crewId](
+                const std::shared_ptr<CrewMember>& member
+            )
+            {
+                return member &&
+                       member->getId() == crewId;
+            }
+        );
+
+    if (crewIt == crewMembers.end())
+    {
+        std::cout
+            << "\nCrew member not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto crewMember = *crewIt;
+
+    std::cout
+        << "\nCrew Member: "
+        << crewMember->getFullName()
+        << "\n"
+        << "Role: "
+        << crewMember->getCrewRole()
+        << "\n"
+        << "Current Status: "
+        << (
+            crewMember->getIsActive()
+                ? "Active"
+                : "Inactive"
+        )
+        << "\n\n"
+        << "1. Activate\n"
+        << "2. Deactivate\n"
+        << "3. Cancel\n\n"
+        << "Choose: ";
+
+    int choice;
+
+    if (!(std::cin >> choice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid input.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (choice == 3)
+    {
+        return;
+    }
+
+    bool newStatus;
+
+    switch (choice)
+    {
+        case 1:
+            newStatus = true;
+            break;
+
+        case 2:
+            newStatus = false;
+            break;
+
+        default:
+            std::cout
+                << "\nInvalid option.\n";
+
+            pause();
+            return;
+    }
+
+    try
+    {
+        crewMember->setIsActive(
+            newStatus
+        );
+
+        CrewRepository repository;
+
+        repository.save(
+            crewMembers
+        );
+
+        std::cout
+            << "\nCrew status changed successfully.\n"
+            << "New Status: "
+            << (
+                crewMember->getIsActive()
+                    ? "Active"
+                    : "Inactive"
+            )
+            << "\n";
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to change crew status.\n"
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+// ============================================================
+// CREW - ASSIGN TO FLIGHT
+// ============================================================
+
+void ConsoleUI::assignCrewToFlight()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "          ASSIGN CREW TO FLIGHT\n"
+        << "========================================\n\n";
+
+    if (crewMembers.empty())
+    {
+        std::cout
+            << "No crew members found.\n";
+
+        pause();
+        return;
+    }
+
+    if (flights.empty())
+    {
+        std::cout
+            << "No flights found.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Available Crew Members:\n\n";
+
+    for (const auto& crewMember : crewMembers)
+    {
+        if (!crewMember)
+        {
+            continue;
+        }
+
+        std::cout
+            << "ID: "
+            << crewMember->getId()
+            << " | "
+            << crewMember->getFullName()
+            << " | "
+            << crewMember->getCrewRole()
+            << " | Hours: "
+            << crewMember->getTotalFlightHours()
+            << "/"
+            << crewMember->getMaximumFlightHours()
+            << " | Status: "
+            << (
+                crewMember->getIsActive()
+                    ? "Active"
+                    : "Inactive"
+            )
+            << "\n";
+    }
+
+    std::cout
+        << "\nEnter Crew Member ID: ";
+
+    int crewId;
+
+    if (!(std::cin >> crewId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid Crew Member ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto crewIt =
+        std::find_if(
+            crewMembers.begin(),
+            crewMembers.end(),
+            [crewId](
+                const std::shared_ptr<CrewMember>& member
+            )
+            {
+                return member &&
+                       member->getId() == crewId;
+            }
+        );
+
+    if (crewIt == crewMembers.end())
+    {
+        std::cout
+            << "\nCrew member not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto crewMember = *crewIt;
+
+    if (!crewMember->getIsActive())
+    {
+        std::cout
+            << "\nCannot assign an inactive crew member.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "\nAvailable Flights:\n\n";
+
+    for (const auto& flight : flights)
+    {
+        if (!flight)
+        {
+            continue;
+        }
+
+        std::cout
+            << "Flight: "
+            << flight->getFlightNumber()
+            << " | "
+            << flight->getOrigin()
+            << " -> "
+            << flight->getDestination()
+            << " | Duration: "
+            << flight->getFlightDurationHours()
+            << " hours"
+            << " | Status: "
+            << flightStatusToString(
+                   flight->getStatus()
+               )
+            << "\n";
+    }
+
+    std::string flightNumber;
+
+    std::cout
+        << "\nEnter Flight Number: ";
+
+    std::getline(
+        std::cin,
+        flightNumber
+    );
+
+    auto flightIt =
+        std::find_if(
+            flights.begin(),
+            flights.end(),
+            [&flightNumber](
+                const std::shared_ptr<Flight>& flight
+            )
+            {
+                return flight &&
+                       flight->getFlightNumber()
+                           == flightNumber;
+            }
+        );
+
+    if (flightIt == flights.end())
+    {
+        std::cout
+            << "\nFlight not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight = *flightIt;
+
+    if (flight->getStatus() == FlightStatus::Cancelled)
+    {
+        std::cout
+            << "\nCannot assign crew to a cancelled flight.\n";
+
+        pause();
+        return;
+    }
+
+    if (flight->getStatus() == FlightStatus::Completed)
+    {
+        std::cout
+            << "\nCannot assign crew to a completed flight.\n";
+
+        pause();
+        return;
+    }
+
+    try
+    {
+        bool assigned =
+            flight->assignCrewMember(
+                crewMember
+            );
+
+        if (!assigned)
+        {
+            std::cout
+                << "\nCrew member could not be assigned.\n"
+                << "Possible reasons:\n"
+                << "- Already assigned to this flight.\n"
+                << "- Maximum flight hours would be exceeded.\n"
+                << "- Crew member is inactive.\n";
+
+            pause();
+            return;
+        }
+
+        CrewRepository crewRepository;
+
+        FlightRepository flightRepository;
+
+        crewRepository.save(
+            crewMembers
+        );
+
+        flightRepository.save(
+            flights
+        );
+
+        std::cout
+            << "\nCrew member assigned successfully.\n"
+            << "Crew Member: "
+            << crewMember->getFullName()
+            << "\n"
+            << "Flight: "
+            << flight->getFlightNumber()
+            << "\n"
+            << "Total Flight Hours: "
+            << crewMember->getTotalFlightHours()
+            << "/"
+            << crewMember->getMaximumFlightHours()
+            << "\n";
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to assign crew member.\n"
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+// ============================================================
+// CREW - REMOVE FROM FLIGHT
+// ============================================================
+
+void ConsoleUI::removeCrewFromFlight()
+{
+    clearScreen();
+
+    std::cout
+        << "========================================\n"
+        << "         REMOVE CREW FROM FLIGHT\n"
+        << "========================================\n\n";
+
+    if (flights.empty())
+    {
+        std::cout
+            << "No flights found.\n";
+
+        pause();
+        return;
+    }
+
+    bool hasAssignedCrew = false;
+
+    for (const auto& flight : flights)
+    {
+        if (!flight)
+        {
+            continue;
+        }
+
+        if (!flight->getCrewMembers().empty())
+        {
+            hasAssignedCrew = true;
+
+            std::cout
+                << "Flight: "
+                << flight->getFlightNumber()
+                << "\n";
+
+            for (const auto& crewMember :
+                 flight->getCrewMembers())
+            {
+                if (!crewMember)
+                {
+                    continue;
+                }
+
+                std::cout
+                    << "  Crew ID: "
+                    << crewMember->getId()
+                    << " | "
+                    << crewMember->getFullName()
+                    << " | "
+                    << crewMember->getCrewRole()
+                    << "\n";
+            }
+
+            std::cout << "\n";
+        }
+    }
+
+    if (!hasAssignedCrew)
+    {
+        std::cout
+            << "No crew members are currently assigned to flights.\n";
+
+        pause();
+        return;
+    }
+
+    std::string flightNumber;
+
+    std::cout
+        << "Enter Flight Number: ";
+
+    std::getline(
+        std::cin,
+        flightNumber
+    );
+
+    auto flightIt =
+        std::find_if(
+            flights.begin(),
+            flights.end(),
+            [&flightNumber](
+                const std::shared_ptr<Flight>& flight
+            )
+            {
+                return flight &&
+                       flight->getFlightNumber()
+                           == flightNumber;
+            }
+        );
+
+    if (flightIt == flights.end())
+    {
+        std::cout
+            << "\nFlight not found.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight = *flightIt;
+
+    if (flight->getCrewMembers().empty())
+    {
+        std::cout
+            << "\nNo crew members are assigned to this flight.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "\nAssigned Crew:\n\n";
+
+    for (const auto& crewMember :
+         flight->getCrewMembers())
+    {
+        if (!crewMember)
+        {
+            continue;
+        }
+
+        std::cout
+            << "ID: "
+            << crewMember->getId()
+            << " | "
+            << crewMember->getFullName()
+            << " | "
+            << crewMember->getCrewRole()
+            << "\n";
+    }
+
+    int crewId;
+
+    std::cout
+        << "\nEnter Crew Member ID to remove: ";
+
+    if (!(std::cin >> crewId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid Crew Member ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto assignedCrewIt =
+        std::find_if(
+            flight->getCrewMembers().begin(),
+            flight->getCrewMembers().end(),
+            [crewId](
+                const std::shared_ptr<CrewMember>& member
+            )
+            {
+                return member &&
+                       member->getId() == crewId;
+            }
+        );
+
+    if (assignedCrewIt ==
+        flight->getCrewMembers().end())
+    {
+        std::cout
+            << "\nThis crew member is not assigned to this flight.\n";
+
+        pause();
+        return;
+    }
+
+    try
+    {
+        bool removed =
+            flight->removeCrewMember(
+                crewId
+            );
+
+        if (!removed)
+        {
+            std::cout
+                << "\nCrew member could not be removed.\n";
+
+            pause();
+            return;
+        }
+
+        CrewRepository crewRepository;
+
+        FlightRepository flightRepository;
+
+        crewRepository.save(
+            crewMembers
+        );
+
+        flightRepository.save(
+            flights
+        );
+
+        std::cout
+            << "\nCrew member removed successfully.\n";
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nFailed to remove crew member.\n"
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+// ============================================================
+// LOGOUT
+// ============================================================
+
+void ConsoleUI::logout()
+{
+    currentUser = nullptr;
+
+    std::cout
+        << "\nLogged out successfully.\n";
+
+    pause();
+}
+
+// ============================================================
+// UTILITY
+// ============================================================
+
+void ConsoleUI::pause() const
+{
+    std::cout
+        << "\nPress Enter to continue...";
+
+    std::cin.get();
+}
+
+void ConsoleUI::clearScreen() const
+{
+#ifdef _WIN32
+    std::system("cls");
+#else
+    std::system("clear");
+#endif
+}

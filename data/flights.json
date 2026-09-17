@@ -1,0 +1,21 @@
+[
+    {
+        "aircraftId": 1,
+        "arrivalTime": "2026-09-10 12:00",
+        "crewMemberIds": [
+            1,
+            2
+        ],
+        "departureTime": "2026-09-10 09:00",
+        "destination": "Dubai",
+        "flightDurationHours": 3,
+        "flightNumber": "MS123",
+        "occupiedSeats": [
+            "12A",
+            "12B"
+        ],
+        "origin": "Cairo",
+        "price": 5000.0,
+        "status": "Scheduled"
+    }
+]

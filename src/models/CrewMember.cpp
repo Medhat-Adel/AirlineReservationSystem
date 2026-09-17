@@ -18,17 +18,23 @@ CrewMember::CrewMember(
 {
     if (id <= 0)
     {
-        throw std::invalid_argument("Crew member ID must be positive.");
+        throw std::invalid_argument(
+            "Crew member ID must be positive."
+        );
     }
 
     if (employeeId.empty())
     {
-        throw std::invalid_argument("Employee ID cannot be empty.");
+        throw std::invalid_argument(
+            "Employee ID cannot be empty."
+        );
     }
 
     if (fullName.empty())
     {
-        throw std::invalid_argument("Crew member name cannot be empty.");
+        throw std::invalid_argument(
+            "Crew member name cannot be empty."
+        );
     }
 
     if (maximumFlightHours <= 0)
@@ -38,6 +44,10 @@ CrewMember::CrewMember(
         );
     }
 }
+
+// ============================================================
+// GETTERS
+// ============================================================
 
 int CrewMember::getId() const
 {
@@ -69,7 +79,13 @@ bool CrewMember::getIsActive() const
     return isActive;
 }
 
-bool CrewMember::canAssignFlight(int flightHours) const
+// ============================================================
+// FLIGHT HOURS
+// ============================================================
+
+bool CrewMember::canAssignFlight(
+    int flightHours
+) const
 {
     if (flightHours <= 0)
     {
@@ -81,10 +97,13 @@ bool CrewMember::canAssignFlight(int flightHours) const
         return false;
     }
 
-    return totalFlightHours + flightHours <= maximumFlightHours;
+    return totalFlightHours + flightHours
+        <= maximumFlightHours;
 }
 
-void CrewMember::addFlightHours(int flightHours)
+void CrewMember::addFlightHours(
+    int flightHours
+)
 {
     if (flightHours <= 0)
     {
@@ -103,7 +122,9 @@ void CrewMember::addFlightHours(int flightHours)
     totalFlightHours += flightHours;
 }
 
-void CrewMember::subtractFlightHours(int flightHours)
+void CrewMember::subtractFlightHours(
+    int flightHours
+)
 {
     if (flightHours <= 0)
     {
@@ -120,4 +141,51 @@ void CrewMember::subtractFlightHours(int flightHours)
     }
 
     totalFlightHours -= flightHours;
+}
+
+// ============================================================
+// SETTERS
+// ============================================================
+
+void CrewMember::setFullName(
+    const std::string& fullName
+)
+{
+    if (fullName.empty())
+    {
+        throw std::invalid_argument(
+            "Crew member name cannot be empty."
+        );
+    }
+
+    this->fullName = fullName;
+}
+
+void CrewMember::setMaximumFlightHours(
+    int maximumFlightHours
+)
+{
+    if (maximumFlightHours <= 0)
+    {
+        throw std::invalid_argument(
+            "Maximum flight hours must be positive."
+        );
+    }
+
+    if (maximumFlightHours < totalFlightHours)
+    {
+        throw std::invalid_argument(
+            "Maximum flight hours cannot be less than "
+            "current total flight hours."
+        );
+    }
+
+    this->maximumFlightHours = maximumFlightHours;
+}
+
+void CrewMember::setIsActive(
+    bool isActive
+)
+{
+    this->isActive = isActive;
 }
