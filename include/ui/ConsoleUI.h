@@ -11,10 +11,13 @@
 #include "models/CrewMember.h"
 #include "models/Maintenance.h"
 #include "services/MaintenanceService.h"
+#include "services/PassengerService.h"
 
 class AuthenticationService;
 class UserManagementService;
 class BookingService;
+class PassengerService;
+class CheckInService;
 
 class ConsoleUI
 {
@@ -24,6 +27,8 @@ private:
     AuthenticationService& authenticationService;
     UserManagementService& userManagementService;
     BookingService& bookingService;
+    PassengerService& passengerService;
+    CheckInService& checkInService;
 
     std::vector<std::shared_ptr<Aircraft>> aircraft;
     std::vector<std::shared_ptr<CrewMember>> crewMembers;
@@ -37,7 +42,9 @@ public:
         AuthenticationService& authenticationService,
         UserManagementService& userManagementService,
         std::unique_ptr<MaintenanceService> maintenanceService,
-        BookingService& bookingService
+        BookingService& bookingService,
+        PassengerService& passengerService,
+        CheckInService& checkInService
     );
 
     void run();
@@ -74,7 +81,24 @@ private:
     void modifyReservation();
     void changeFlightStatus();
     void cancelReservation();
+    void viewReservationDetails() const;
+    void airportCheckIn();
     void processPayment();
+    void managePassengers();
+
+    
+    // ========================================================
+    // PASSENGER SERVICES
+    // ========================================================
+
+    void passengerCreateReservation();
+    void passengerManageReservations();
+    void passengerModifyReservation();
+    void passengerCancelReservation();
+    void passengerOnlineCheckIn();
+    void passengerViewBoardingPass();
+    void passengerViewProfile();
+    void passengerLoyaltyProgram();
 
     // ========================================================
     // AIRCRAFT MANAGEMENT

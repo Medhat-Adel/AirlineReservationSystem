@@ -22,7 +22,6 @@
 #include "repositories/ReservationRepository.h"
 #include "repositories/PaymentRepository.h"
 
-
 #include "services/AuthenticationService.h"
 #include "services/UserManagementService.h"
 #include "services/FlightSearchService.h"
@@ -30,6 +29,8 @@
 #include "services/MaintenanceService.h"
 #include "services/ReportService.h"
 #include "services/BookingService.h"
+#include "services/PassengerService.h"
+#include "services/CheckInService.h"
 
 // ============================================================
 // CONSTRUCTOR
@@ -40,13 +41,17 @@ ConsoleUI::ConsoleUI(
     AuthenticationService& authenticationService,
     UserManagementService& userManagementService,
     std::unique_ptr<MaintenanceService> maintenanceService,
-    BookingService& bookingService
+    BookingService& bookingService,
+    PassengerService& passengerService,
+    CheckInService& checkInService
 )
-: users(users),
-  authenticationService(authenticationService),
-  userManagementService(userManagementService),
-  bookingService(bookingService),
-  maintenanceService(std::move(maintenanceService)),
+: users(users), 
+  authenticationService(authenticationService), 
+  userManagementService(userManagementService), 
+  bookingService(bookingService), 
+  passengerService(passengerService),
+  checkInService(checkInService),
+  maintenanceService(std::move(maintenanceService)), 
   currentUser(nullptr)
 {
     AircraftRepository aircraftRepository;
@@ -391,6 +396,14 @@ void ConsoleUI::showBookingAgentMenu()
             case 6:
                 processPayment();
                 break;
+
+            case 5:
+                airportCheckIn();
+                break;
+
+            case 7:
+                managePassengers();
+                break;
                 
             case 8:
                 logout();
@@ -460,6 +473,34 @@ void ConsoleUI::showPassengerMenu()
 
         switch (choice)
         {
+            case 1:
+                searchFlights();
+                break;
+
+            case 2:
+                passengerCreateReservation();
+                break;
+
+            case 3:
+                passengerManageReservations();
+                break;
+
+            case 4:
+                passengerOnlineCheckIn();
+                break;
+
+            case 5:
+                passengerViewBoardingPass();
+                break;
+
+            case 6:
+                passengerViewProfile();
+                break;
+
+            case 7:
+                passengerLoyaltyProgram();
+                break;
+                
             case 8:
                 logout();
                 break;
@@ -2463,6 +2504,1820 @@ void ConsoleUI::createReservation()
     pause();
 }
 
+void ConsoleUI::passengerCreateReservation()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "         Make Reservation\n"
+        << "=====================================\n\n";
+
+    // ========================================================
+    // 1. Get Current Passenger
+    // ========================================================
+
+    auto passenger =
+        std::dynamic_pointer_cast<Passenger>(currentUser);
+
+    if (passenger == nullptr)
+    {
+        std::cout
+            << "Current user is not a passenger.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Passenger: "
+        << passenger->getFullName()
+        << "\n"
+        << "Passport: "
+        << passenger->getPassportNumber()
+        << "\n\n";
+
+    // ========================================================
+    // 2. Select Flight
+    // ========================================================
+
+    std::cout
+        << "Available Flights:\n\n";
+
+    std::vector<std::shared_ptr<Flight>> availableFlights;
+
+    for (const auto& flight : flights)
+    {
+        if (flight == nullptr)
+        {
+            continue;
+        }
+
+        if (flight->getStatus() ==
+                FlightStatus::Cancelled ||
+            flight->getStatus() ==
+                FlightStatus::Completed)
+        {
+            continue;
+        }
+
+        availableFlights.push_back(flight);
+    }
+
+    if (availableFlights.empty())
+    {
+        std::cout
+            << "No available flights.\n";
+
+        pause();
+        return;
+    }
+
+    for (std::size_t i = 0;
+         i < availableFlights.size();
+         ++i)
+    {
+        const auto& flight =
+            availableFlights[i];
+
+        std::cout
+            << i + 1
+            << ". "
+            << flight->getFlightNumber()
+            << " | "
+            << flight->getOrigin()
+            << " -> "
+            << flight->getDestination()
+            << " | Departure: "
+            << flight->getDepartureTime()
+            << " | Price: "
+            << flight->getPrice()
+            << " | Available Seats: "
+            << flight->getAvailableSeats()
+            << "\n";
+    }
+
+    std::cout
+        << "\nSelect Flight: ";
+
+    int flightChoice;
+
+    if (!(std::cin >> flightChoice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid input.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (flightChoice < 1 ||
+        flightChoice >
+            static_cast<int>(
+                availableFlights.size()
+            ))
+    {
+        std::cout
+            << "\nInvalid flight selection.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight =
+        availableFlights[flightChoice - 1];
+
+    // ========================================================
+    // 3. Select Seat
+    // ========================================================
+
+    std::cout
+        << "\n=====================================\n"
+        << "Seat Selection\n"
+        << "=====================================\n\n";
+
+    std::cout
+        << "Available Seats: "
+        << flight->getAvailableSeats()
+        << "\n";
+
+    std::cout
+        << "Enter Seat Number "
+        << "(example: 12A): ";
+
+    std::string seatNumber;
+
+    std::getline(
+        std::cin,
+        seatNumber
+    );
+
+    if (seatNumber.empty())
+    {
+        std::cout
+            << "\nSeat number cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 4. Booking Date
+    // ========================================================
+
+    std::cout
+        << "Booking Date (YYYY-MM-DD): ";
+
+    std::string bookingDate;
+
+    std::getline(
+        std::cin,
+        bookingDate
+    );
+
+    if (bookingDate.empty())
+    {
+        std::cout
+            << "\nBooking date cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 5. Payment Method
+    // ========================================================
+
+    std::cout
+        << "\nPayment Method:\n"
+        << "1. Cash\n"
+        << "2. Card\n"
+        << "3. Bank Transfer\n"
+        << "\nChoose Payment Method: ";
+
+    int paymentChoice;
+
+    if (!(std::cin >> paymentChoice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid payment method.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    PaymentMethod paymentMethod;
+
+    switch (paymentChoice)
+    {
+        case 1:
+            paymentMethod = PaymentMethod::Cash;
+            break;
+
+        case 2:
+            paymentMethod = PaymentMethod::Card;
+            break;
+
+        case 3:
+            paymentMethod =
+                PaymentMethod::BankTransfer;
+            break;
+
+        default:
+            std::cout
+                << "\nInvalid payment method.\n";
+
+            pause();
+            return;
+    }
+
+    // ========================================================
+    // 6. Create Reservation
+    // ========================================================
+
+    try
+    {
+        auto reservation =
+            bookingService.createReservation(
+                passenger,
+                flight,
+                seatNumber,
+                bookingDate,
+                paymentMethod
+            );
+
+        if (reservation == nullptr)
+        {
+            std::cout
+                << "\nFailed to create reservation.\n";
+
+            pause();
+            return;
+        }
+
+        std::cout
+            << "\n=====================================\n"
+            << "       Reservation Result\n"
+            << "=====================================\n\n";
+
+        std::cout
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Passenger      : "
+            << passenger->getFullName()
+            << "\n"
+            << "Flight         : "
+            << flight->getFlightNumber()
+            << "\n"
+            << "Route          : "
+            << flight->getOrigin()
+            << " -> "
+            << flight->getDestination()
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Price          : "
+            << reservation->getTotalPrice()
+            << "\n";
+
+        if (reservation->getStatus() ==
+            ReservationStatus::Confirmed)
+        {
+            std::cout
+                << "Status         : Confirmed\n"
+                << "Payment        : Completed\n";
+        }
+        else if (
+            reservation->getStatus() ==
+            ReservationStatus::Waitlisted)
+        {
+            std::cout
+                << "Status         : Waitlisted\n"
+                << "Payment        : Pending\n";
+        }
+
+        std::cout
+            << "\nReservation created successfully.\n";
+    }
+    catch (const std::exception& exception)
+    {
+        std::cout
+            << "\nReservation failed: "
+            << exception.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::passengerManageReservations()
+{
+    while (currentUser)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "        Manage My Reservations\n"
+            << "=====================================\n\n";
+
+        auto passenger =
+            std::dynamic_pointer_cast<Passenger>(
+                currentUser
+            );
+
+        if (passenger == nullptr)
+        {
+            std::cout
+                << "Current user is not a passenger.\n";
+
+            pause();
+            return;
+        }
+
+        std::cout
+            << "Passenger: "
+            << passenger->getFullName()
+            << "\n\n";
+
+        const auto& reservations =
+            bookingService.getAllReservations();
+
+        bool hasReservations = false;
+
+        for (const auto& reservation : reservations)
+        {
+            if (reservation == nullptr)
+            {
+                continue;
+            }
+
+            auto reservationPassenger =
+                reservation->getPassenger();
+
+            if (reservationPassenger == nullptr ||
+                reservationPassenger->getId() !=
+                    passenger->getId())
+            {
+                continue;
+            }
+
+            hasReservations = true;
+
+            auto flight =
+                reservation->getFlight();
+
+            std::cout
+                << "-------------------------------------\n"
+                << "Reservation ID : "
+                << reservation->getId()
+                << "\n"
+                << "Flight         : "
+                << (flight != nullptr
+                        ? flight->getFlightNumber()
+                        : "Unknown")
+                << "\n"
+                << "Route          : "
+                << (flight != nullptr
+                        ? flight->getOrigin() +
+                              " -> " +
+                              flight->getDestination()
+                        : "Unknown")
+                << "\n"
+                << "Seat           : "
+                << reservation->getSeatNumber()
+                << "\n"
+                << "Price          : "
+                << reservation->getTotalPrice()
+                << "\n"
+                << "Status         : ";
+
+            if (reservation->getStatus() ==
+                ReservationStatus::Confirmed)
+            {
+                std::cout << "Confirmed";
+            }
+            else if (
+                reservation->getStatus() ==
+                ReservationStatus::Waitlisted)
+            {
+                std::cout << "Waitlisted";
+            }
+            else
+            {
+                std::cout << "Cancelled";
+            }
+
+            std::cout
+                << "\n"
+                << "-------------------------------------\n";
+        }
+
+        if (!hasReservations)
+        {
+            std::cout
+                << "You do not have any reservations.\n\n";
+
+            std::cout
+                << "1. Back\n\n"
+                << "Choose an option: ";
+
+            int choice;
+
+            if (!(std::cin >> choice))
+            {
+                std::cin.clear();
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                continue;
+            }
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            if (choice == 1)
+            {
+                return;
+            }
+
+            continue;
+        }
+
+        std::cout
+            << "\n"
+            << "1. View Reservation Details\n"
+            << "2. Modify Reservation\n"
+            << "3. Cancel Reservation\n"
+            << "4. Back\n\n"
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            case 1:
+            {
+                std::cout
+                    << "\nEnter Reservation ID: ";
+
+                int reservationId;
+
+                if (!(std::cin >> reservationId))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid reservation ID.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                auto reservation =
+                    bookingService.getReservation(
+                        reservationId
+                    );
+
+                if (reservation == nullptr ||
+                    reservation->getPassenger() == nullptr ||
+                    reservation->getPassenger()->getId() !=
+                        passenger->getId())
+                {
+                    std::cout
+                        << "\nReservation not found "
+                        << "in your account.\n";
+
+                    pause();
+                    break;
+                }
+
+                auto flight =
+                    reservation->getFlight();
+
+                std::cout
+                    << "\n=====================================\n"
+                    << "       Reservation Details\n"
+                    << "=====================================\n\n"
+                    << "Reservation ID : "
+                    << reservation->getId()
+                    << "\n"
+                    << "Passenger      : "
+                    << passenger->getFullName()
+                    << "\n"
+                    << "Flight         : "
+                    << (flight != nullptr
+                            ? flight->getFlightNumber()
+                            : "Unknown")
+                    << "\n"
+                    << "Route          : "
+                    << (flight != nullptr
+                            ? flight->getOrigin() +
+                              " -> " +
+                              flight->getDestination()
+                            : "Unknown")
+                    << "\n"
+                    << "Seat           : "
+                    << reservation->getSeatNumber()
+                    << "\n"
+                    << "Price          : "
+                    << reservation->getTotalPrice()
+                    << "\n"
+                    << "Status         : ";
+
+                if (reservation->getStatus() ==
+                    ReservationStatus::Confirmed)
+                {
+                    std::cout << "Confirmed";
+                }
+                else if (
+                    reservation->getStatus() ==
+                    ReservationStatus::Waitlisted)
+                {
+                    std::cout << "Waitlisted";
+                }
+                else
+                {
+                    std::cout << "Cancelled";
+                }
+
+                std::cout << "\n";
+
+                pause();
+                break;
+            }
+
+            case 2:
+                passengerModifyReservation();
+                break;
+
+            case 3:
+                passengerCancelReservation();
+                break;
+
+            case 4:
+                return;
+
+            default:
+                std::cout
+                    << "\nInvalid option.\n";
+
+                pause();
+                break;
+        }
+    }
+}
+
+void ConsoleUI::passengerModifyReservation()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "      Modify My Reservation\n"
+        << "=====================================\n\n";
+
+    auto passenger =
+        std::dynamic_pointer_cast<Passenger>(
+            currentUser
+        );
+
+    if (passenger == nullptr)
+    {
+        std::cout
+            << "Current user is not a passenger.\n";
+
+        pause();
+        return;
+    }
+
+    const auto& reservations =
+        bookingService.getAllReservations();
+
+    bool hasReservations = false;
+
+    for (const auto& reservation : reservations)
+    {
+        if (reservation == nullptr ||
+            reservation->getPassenger() == nullptr)
+        {
+            continue;
+        }
+
+        if (reservation->getPassenger()->getId() !=
+            passenger->getId())
+        {
+            continue;
+        }
+
+        hasReservations = true;
+
+        auto flight =
+            reservation->getFlight();
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Flight         : "
+            << (flight != nullptr
+                    ? flight->getFlightNumber()
+                    : "Unknown")
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Status         : ";
+
+        if (reservation->getStatus() ==
+            ReservationStatus::Confirmed)
+        {
+            std::cout << "Confirmed";
+        }
+        else if (
+            reservation->getStatus() ==
+            ReservationStatus::Waitlisted)
+        {
+            std::cout << "Waitlisted";
+        }
+        else
+        {
+            std::cout << "Cancelled";
+        }
+
+        std::cout
+            << "\n"
+            << "-------------------------------------\n";
+    }
+
+    if (!hasReservations)
+    {
+        std::cout
+            << "You do not have any reservations.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "\nEnter Reservation ID: ";
+
+    int reservationId;
+
+    if (!(std::cin >> reservationId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid reservation ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto reservation =
+        bookingService.getReservation(
+            reservationId
+        );
+
+    if (reservation == nullptr ||
+        reservation->getPassenger() == nullptr ||
+        reservation->getPassenger()->getId() !=
+            passenger->getId())
+    {
+        std::cout
+            << "\nReservation not found in your account.\n";
+
+        pause();
+        return;
+    }
+
+    if (reservation->getStatus() ==
+        ReservationStatus::Cancelled)
+    {
+        std::cout
+            << "\nCannot modify a cancelled reservation.\n";
+
+        pause();
+        return;
+    }
+
+    if (reservation->getStatus() ==
+        ReservationStatus::Waitlisted)
+    {
+        std::cout
+            << "\nCannot modify a waitlisted reservation.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight =
+        reservation->getFlight();
+
+    if (flight == nullptr)
+    {
+        std::cout
+            << "\nFlight information is unavailable.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "\n=====================================\n"
+        << "Current Reservation\n"
+        << "=====================================\n"
+        << "Flight         : "
+        << flight->getFlightNumber()
+        << "\n"
+        << "Route          : "
+        << flight->getOrigin()
+        << " -> "
+        << flight->getDestination()
+        << "\n"
+        << "Current Seat   : "
+        << reservation->getSeatNumber()
+        << "\n"
+        << "Available Seats: "
+        << flight->getAvailableSeats()
+        << "\n";
+
+    std::cout
+        << "\nEnter New Seat Number "
+        << "(example: 12B): ";
+
+    std::string newSeatNumber;
+
+    std::getline(
+        std::cin,
+        newSeatNumber
+    );
+
+    if (newSeatNumber.empty())
+    {
+        std::cout
+            << "\nSeat number cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    const std::string oldSeatNumber =
+        reservation->getSeatNumber();
+
+    try
+    {
+        const bool modified =
+            bookingService.modifyReservation(
+                reservationId,
+                newSeatNumber
+            );
+
+        if (!modified)
+        {
+            std::cout
+                << "\nFailed to modify reservation.\n"
+                << "The new seat may be unavailable.\n";
+
+            pause();
+            return;
+        }
+
+        std::cout
+            << "\n=====================================\n"
+            << " Reservation Modified Successfully\n"
+            << "=====================================\n\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Flight         : "
+            << flight->getFlightNumber()
+            << "\n"
+            << "Old Seat       : "
+            << oldSeatNumber
+            << "\n"
+            << "New Seat       : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Status         : Confirmed\n";
+    }
+    catch (const std::exception& exception)
+    {
+        std::cout
+            << "\nModification failed: "
+            << exception.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::passengerCancelReservation()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "       Cancel My Reservation\n"
+        << "=====================================\n\n";
+
+    auto passenger =
+        std::dynamic_pointer_cast<Passenger>(
+            currentUser
+        );
+
+    if (passenger == nullptr)
+    {
+        std::cout
+            << "Current user is not a passenger.\n";
+
+        pause();
+        return;
+    }
+
+    const auto& reservations =
+        bookingService.getAllReservations();
+
+    bool hasReservations = false;
+
+    for (const auto& reservation : reservations)
+    {
+        if (reservation == nullptr ||
+            reservation->getPassenger() == nullptr)
+        {
+            continue;
+        }
+
+        if (reservation->getPassenger()->getId() !=
+            passenger->getId())
+        {
+            continue;
+        }
+
+        hasReservations = true;
+
+        auto flight =
+            reservation->getFlight();
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Flight         : "
+            << (flight != nullptr
+                    ? flight->getFlightNumber()
+                    : "Unknown")
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Price          : "
+            << reservation->getTotalPrice()
+            << "\n"
+            << "Status         : ";
+
+        if (reservation->getStatus() ==
+            ReservationStatus::Confirmed)
+        {
+            std::cout << "Confirmed";
+        }
+        else if (
+            reservation->getStatus() ==
+            ReservationStatus::Waitlisted)
+        {
+            std::cout << "Waitlisted";
+        }
+        else
+        {
+            std::cout << "Cancelled";
+        }
+
+        std::cout
+            << "\n"
+            << "-------------------------------------\n";
+    }
+
+    if (!hasReservations)
+    {
+        std::cout
+            << "You do not have any reservations.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "\nEnter Reservation ID: ";
+
+    int reservationId;
+
+    if (!(std::cin >> reservationId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid reservation ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto reservation =
+        bookingService.getReservation(
+            reservationId
+        );
+
+    if (reservation == nullptr ||
+        reservation->getPassenger() == nullptr ||
+        reservation->getPassenger()->getId() !=
+            passenger->getId())
+    {
+        std::cout
+            << "\nReservation not found in your account.\n";
+
+        pause();
+        return;
+    }
+
+    if (reservation->getStatus() ==
+        ReservationStatus::Cancelled)
+    {
+        std::cout
+            << "\nReservation is already cancelled.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight =
+        reservation->getFlight();
+
+    std::cout
+        << "\n=====================================\n"
+        << "Reservation Details\n"
+        << "=====================================\n"
+        << "Reservation ID : "
+        << reservation->getId()
+        << "\n"
+        << "Flight         : "
+        << (flight != nullptr
+                ? flight->getFlightNumber()
+                : "Unknown")
+        << "\n"
+        << "Seat           : "
+        << reservation->getSeatNumber()
+        << "\n"
+        << "Price          : "
+        << reservation->getTotalPrice()
+        << "\n";
+
+    std::cout
+        << "\nAre you sure you want to cancel "
+        << "this reservation? (Y/N): ";
+
+    char confirmation;
+
+    std::cin >> confirmation;
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    if (confirmation != 'Y' &&
+        confirmation != 'y')
+    {
+        std::cout
+            << "\nCancellation aborted.\n";
+
+        pause();
+        return;
+    }
+
+    try
+    {
+        const bool cancelled =
+            bookingService.cancelReservation(
+                reservationId
+            );
+
+        if (!cancelled)
+        {
+            std::cout
+                << "\nFailed to cancel reservation.\n";
+
+            pause();
+            return;
+        }
+
+        std::cout
+            << "\n=====================================\n"
+            << " Reservation Cancelled Successfully\n"
+            << "=====================================\n\n"
+            << "Reservation ID : "
+            << reservationId
+            << "\n"
+            << "Status         : Cancelled\n"
+            << "\n"
+            << "Payment refund processed successfully.\n";
+    }
+    catch (const std::exception& exception)
+    {
+        std::cout
+            << "\nCancellation failed: "
+            << exception.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::passengerOnlineCheckIn()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "          Online Check-In\n"
+        << "=====================================\n\n";
+
+    auto passenger =
+        std::dynamic_pointer_cast<Passenger>(
+            currentUser
+        );
+
+    if (passenger == nullptr)
+    {
+        std::cout
+            << "Current user is not a passenger.\n";
+
+        pause();
+        return;
+    }
+
+    const auto& reservations =
+        bookingService.getAllReservations();
+
+    bool hasReservations = false;
+
+    // ========================================================
+    // 1. Display Passenger Reservations
+    // ========================================================
+
+    std::cout
+        << "Your Reservations:\n\n";
+
+    for (const auto& reservation : reservations)
+    {
+        if (reservation == nullptr ||
+            reservation->getPassenger() == nullptr)
+        {
+            continue;
+        }
+
+        if (reservation->getPassenger()->getId() !=
+            passenger->getId())
+        {
+            continue;
+        }
+
+        hasReservations = true;
+
+        auto flight =
+            reservation->getFlight();
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Flight         : "
+            << (flight != nullptr
+                    ? flight->getFlightNumber()
+                    : "Unknown")
+            << "\n"
+            << "Route          : "
+            << (flight != nullptr
+                    ? flight->getOrigin() +
+                      " -> " +
+                      flight->getDestination()
+                    : "Unknown")
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Status         : ";
+
+        if (reservation->getStatus() ==
+            ReservationStatus::Confirmed)
+        {
+            std::cout << "Confirmed";
+        }
+        else if (
+            reservation->getStatus() ==
+            ReservationStatus::Waitlisted)
+        {
+            std::cout << "Waitlisted";
+        }
+        else
+        {
+            std::cout << "Cancelled";
+        }
+
+        std::cout
+            << "\n"
+            << "-------------------------------------\n";
+    }
+
+    if (!hasReservations)
+    {
+        std::cout
+            << "You do not have any reservations.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 2. Select Reservation
+    // ========================================================
+
+    std::cout
+        << "\nEnter Reservation ID: ";
+
+    int reservationId;
+
+    if (!(std::cin >> reservationId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid reservation ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto reservation =
+        bookingService.getReservation(
+            reservationId
+        );
+
+    // ========================================================
+    // 3. Validate Ownership
+    // ========================================================
+
+    if (reservation == nullptr ||
+        reservation->getPassenger() == nullptr ||
+        reservation->getPassenger()->getId() !=
+            passenger->getId())
+    {
+        std::cout
+            << "\nReservation not found in your account.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 4. Validate Reservation
+    // ========================================================
+
+    if (reservation->getStatus() ==
+        ReservationStatus::Cancelled)
+    {
+        std::cout
+            << "\nCannot check in a cancelled reservation.\n";
+
+        pause();
+        return;
+    }
+
+    if (reservation->getStatus() ==
+        ReservationStatus::Waitlisted)
+    {
+        std::cout
+            << "\nCannot check in a waitlisted reservation.\n";
+
+        pause();
+        return;
+    }
+
+    auto flight =
+        reservation->getFlight();
+
+    if (flight == nullptr)
+    {
+        std::cout
+            << "\nFlight information is unavailable.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 5. Check Existing Check-In
+    // ========================================================
+
+    auto existingCheckIn =
+        checkInService.getCheckInByReservationId(
+            reservationId
+        );
+
+    if (existingCheckIn != nullptr)
+    {
+        std::cout
+            << "\nThis reservation is already checked in.\n";
+
+        auto boardingPass =
+            checkInService.getBoardingPassByReservationId(
+                reservationId
+            );
+
+        if (boardingPass != nullptr)
+        {
+            std::cout
+                << "Boarding Pass : "
+                << boardingPass->getPassNumber()
+                << "\n";
+        }
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 6. Display Flight Information
+    // ========================================================
+
+    std::cout
+        << "\n=====================================\n"
+        << "       Check-In Information\n"
+        << "=====================================\n"
+        << "Reservation ID : "
+        << reservation->getId()
+        << "\n"
+        << "Passenger      : "
+        << passenger->getFullName()
+        << "\n"
+        << "Flight         : "
+        << flight->getFlightNumber()
+        << "\n"
+        << "Route          : "
+        << flight->getOrigin()
+        << " -> "
+        << flight->getDestination()
+        << "\n"
+        << "Seat           : "
+        << reservation->getSeatNumber()
+        << "\n";
+
+    // ========================================================
+    // 7. Check-In Information
+    // ========================================================
+
+    std::string checkInDateTime;
+    std::string gate;
+    std::string boardingTime;
+
+    std::cout
+        << "\nCheck-In Date & Time: ";
+
+    std::getline(
+        std::cin,
+        checkInDateTime
+    );
+
+    if (checkInDateTime.empty())
+    {
+        std::cout
+            << "\nCheck-in date/time cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Gate: ";
+
+    std::getline(
+        std::cin,
+        gate
+    );
+
+    if (gate.empty())
+    {
+        std::cout
+            << "\nGate cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Boarding Time: ";
+
+    std::getline(
+        std::cin,
+        boardingTime
+    );
+
+    if (boardingTime.empty())
+    {
+        std::cout
+            << "\nBoarding time cannot be empty.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 8. Perform Online Check-In
+    // ========================================================
+
+    try
+    {
+        auto checkIn =
+            checkInService.onlineCheckIn(
+                reservation,
+                checkInDateTime,
+                gate,
+                boardingTime
+            );
+
+        if (checkIn == nullptr)
+        {
+            std::cout
+                << "\nFailed to complete online check-in.\n";
+
+            pause();
+            return;
+        }
+
+        auto boardingPass =
+            checkInService.getBoardingPassByReservationId(
+                reservationId
+            );
+
+        std::cout
+            << "\n=====================================\n"
+            << " Online Check-In Successful\n"
+            << "=====================================\n\n"
+            << "Reservation ID : "
+            << reservationId
+            << "\n"
+            << "Flight         : "
+            << flight->getFlightNumber()
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Check-In Type  : Online\n";
+
+        if (boardingPass != nullptr)
+        {
+            std::cout
+                << "Boarding Pass  : "
+                << boardingPass->getPassNumber()
+                << "\n"
+                << "Gate           : "
+                << gate
+                << "\n"
+                << "Boarding Time  : "
+                << boardingTime
+                << "\n";
+        }
+
+        std::cout
+            << "\nOnline check-in completed successfully.\n";
+    }
+    catch (const std::exception& exception)
+    {
+        std::cout
+            << "\nCheck-in failed: "
+            << exception.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::passengerViewBoardingPass()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "          View Boarding Pass\n"
+        << "=====================================\n\n";
+
+    auto passenger =
+        std::dynamic_pointer_cast<Passenger>(
+            currentUser
+        );
+
+    if (passenger == nullptr)
+    {
+        std::cout
+            << "Current user is not a passenger.\n";
+
+        pause();
+        return;
+    }
+
+    const auto& reservations =
+        bookingService.getAllReservations();
+
+    bool hasCheckIns = false;
+
+    // ========================================================
+    // 1. Display Passenger Boarding Passes
+    // ========================================================
+
+    for (const auto& reservation : reservations)
+    {
+        if (reservation == nullptr ||
+            reservation->getPassenger() == nullptr)
+        {
+            continue;
+        }
+
+        if (reservation->getPassenger()->getId() !=
+            passenger->getId())
+        {
+            continue;
+        }
+
+        auto boardingPass =
+            checkInService.getBoardingPassByReservationId(
+                reservation->getId()
+            );
+
+        if (boardingPass == nullptr)
+        {
+            continue;
+        }
+
+        hasCheckIns = true;
+
+        std::cout
+            << "=====================================\n"
+            << "           Boarding Pass\n"
+            << "=====================================\n"
+            << "Pass Number    : "
+            << boardingPass->getPassNumber()
+            << "\n"
+            << "Reservation ID : "
+            << boardingPass->getReservationId()
+            << "\n"
+            << "Passenger      : "
+            << boardingPass->getPassengerName()
+            << "\n"
+            << "Passport       : "
+            << boardingPass->getPassportNumber()
+            << "\n"
+            << "Flight         : "
+            << boardingPass->getFlightNumber()
+            << "\n"
+            << "Seat           : "
+            << boardingPass->getSeatNumber()
+            << "\n"
+            << "Gate           : "
+            << boardingPass->getGate()
+            << "\n"
+            << "Boarding Time  : "
+            << boardingPass->getBoardingTime()
+            << "\n"
+            << "=====================================\n\n";
+    }
+
+    // ========================================================
+    // 2. No Boarding Pass
+    // ========================================================
+
+    if (!hasCheckIns)
+    {
+        std::cout
+            << "No boarding pass is available.\n\n"
+            << "You must complete online check-in "
+            << "before viewing your boarding pass.\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::passengerViewProfile()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "            My Profile\n"
+        << "=====================================\n\n";
+
+    auto passenger =
+        std::dynamic_pointer_cast<Passenger>(
+            currentUser
+        );
+
+    if (passenger == nullptr)
+    {
+        std::cout
+            << "Current user is not a passenger.\n";
+
+        pause();
+        return;
+    }
+
+    passengerService.displayProfile(
+        passenger
+    );
+
+    pause();
+}
+
+void ConsoleUI::passengerLoyaltyProgram()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "          Loyalty Program\n"
+        << "=====================================\n\n";
+
+    auto passenger =
+        std::dynamic_pointer_cast<Passenger>(
+            currentUser
+        );
+
+    if (passenger == nullptr)
+    {
+        std::cout
+            << "Current user is not a passenger.\n";
+
+        pause();
+        return;
+    }
+
+    // ========================================================
+    // 1. Display Loyalty Points
+    // ========================================================
+
+    std::cout
+        << "Passenger: "
+        << passenger->getFullName()
+        << "\n\n"
+        << "Current Loyalty Points: "
+        << passenger->getLoyaltyPoints()
+        << "\n\n";
+
+    // ========================================================
+    // 2. Loyalty Information
+    // ========================================================
+
+    std::cout
+        << "Loyalty Program Information\n"
+        << "-------------------------------------\n"
+        << "Points are earned based on reservation price.\n"
+        << "Every 100 currency units = 1 loyalty point.\n"
+        << "-------------------------------------\n\n";
+
+    // ========================================================
+    // 3. Loyalty Menu
+    // ========================================================
+
+    std::cout
+        << "1. Redeem Loyalty Points\n"
+        << "2. Back\n\n"
+        << "Choose an option: ";
+
+    int choice;
+
+    if (!(std::cin >> choice))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid input.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    switch (choice)
+    {
+        case 1:
+        {
+            const int currentPoints =
+                passenger->getLoyaltyPoints();
+
+            if (currentPoints <= 0)
+            {
+                std::cout
+                    << "\nYou do not have enough loyalty points "
+                    << "to redeem.\n";
+
+                pause();
+                return;
+            }
+
+            std::cout
+                << "\nCurrent Points: "
+                << currentPoints
+                << "\n\n"
+                << "Enter points to redeem: ";
+
+            int pointsToRedeem;
+
+            if (!(std::cin >> pointsToRedeem))
+            {
+                std::cin.clear();
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                std::cout
+                    << "\nInvalid points amount.\n";
+
+                pause();
+                return;
+            }
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            if (pointsToRedeem <= 0)
+            {
+                std::cout
+                    << "\nPoints to redeem must be positive.\n";
+
+                pause();
+                return;
+            }
+
+            if (pointsToRedeem > currentPoints)
+            {
+                std::cout
+                    << "\nYou do not have enough loyalty points.\n"
+                    << "Available Points: "
+                    << currentPoints
+                    << "\n";
+
+                pause();
+                return;
+            }
+
+            const bool redeemed =
+                passenger->redeemLoyaltyPoints(
+                    pointsToRedeem
+                );
+
+            if (!redeemed)
+            {
+                std::cout
+                    << "\nFailed to redeem loyalty points.\n";
+
+                pause();
+                return;
+            }
+
+            std::cout
+                << "\n=====================================\n"
+                << "   Loyalty Points Redeemed\n"
+                << "=====================================\n\n"
+                << "Redeemed Points : "
+                << pointsToRedeem
+                << "\n"
+                << "Remaining Points: "
+                << passenger->getLoyaltyPoints()
+                << "\n"
+                << "\nPoints redeemed successfully.\n";
+
+            pause();
+            break;
+        }
+
+        case 2:
+            return;
+
+        default:
+            std::cout
+                << "\nInvalid option.\n";
+
+            pause();
+            break;
+    }
+}
+
 void ConsoleUI::modifyReservation()
 {
     clearScreen();
@@ -2963,6 +4818,806 @@ void ConsoleUI::cancelReservation()
     }
 
     pause();
+}
+
+void ConsoleUI::airportCheckIn()
+{
+    clearScreen();
+
+    std::cout
+        << "=====================================\n"
+        << "          Airport Check-In\n"
+        << "=====================================\n\n";
+
+    const auto& reservations =
+        bookingService.getAllReservations();
+
+    if (reservations.empty())
+    {
+        std::cout
+            << "No reservations available.\n";
+
+        pause();
+        return;
+    }
+
+    std::cout
+        << "Existing Reservations:\n\n";
+
+    for (const auto& reservation : reservations)
+    {
+        if (reservation == nullptr)
+            continue;
+
+        std::cout
+            << "-------------------------------------\n"
+            << "Reservation ID : "
+            << reservation->getId()
+            << "\n"
+            << "Passenger      : "
+            << reservation->getPassenger()->getFullName()
+            << "\n"
+            << "Flight         : "
+            << reservation->getFlight()->getFlightNumber()
+            << "\n"
+            << "Seat           : "
+            << reservation->getSeatNumber()
+            << "\n"
+            << "Status         : ";
+
+        switch (reservation->getStatus())
+        {
+            case ReservationStatus::Confirmed:
+                std::cout << "Confirmed";
+                break;
+
+            case ReservationStatus::Waitlisted:
+                std::cout << "Waitlisted";
+                break;
+
+            case ReservationStatus::Cancelled:
+                std::cout << "Cancelled";
+                break;
+        }
+
+        std::cout << "\n";
+    }
+
+    std::cout
+        << "-------------------------------------\n\n"
+        << "Enter Reservation ID: ";
+
+    int reservationId;
+
+    if (!(std::cin >> reservationId))
+    {
+        std::cin.clear();
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        std::cout
+            << "\nInvalid reservation ID.\n";
+
+        pause();
+        return;
+    }
+
+    std::cin.ignore(
+        std::numeric_limits<std::streamsize>::max(),
+        '\n'
+    );
+
+    auto reservation =
+        bookingService.getReservation(reservationId);
+
+    if (reservation == nullptr)
+    {
+        std::cout
+            << "\nReservation not found.\n";
+
+        pause();
+        return;
+    }
+
+    std::string checkInDateTime;
+    std::string gate;
+    std::string boardingTime;
+
+    std::cout
+        << "\nCheck-In Date/Time: ";
+    std::getline(std::cin, checkInDateTime);
+
+    std::cout
+        << "Gate: ";
+    std::getline(std::cin, gate);
+
+    std::cout
+        << "Boarding Time: ";
+    std::getline(std::cin, boardingTime);
+
+    try
+    {
+        auto checkIn =
+            checkInService.airportCheckIn(
+                reservation,
+                checkInDateTime,
+                gate,
+                boardingTime
+            );
+
+        if (checkIn == nullptr)
+        {
+            std::cout
+                << "\nAirport check-in failed.\n";
+
+            pause();
+            return;
+        }
+
+        auto boardingPass =
+            checkInService.getBoardingPassByReservationId(
+                reservationId
+            );
+
+        std::cout
+            << "\n=====================================\n"
+            << "       Check-In Successful\n"
+            << "=====================================\n\n";
+
+        std::cout
+            << "Check-In ID      : "
+            << checkIn->getId()
+            << "\n"
+            << "Reservation ID   : "
+            << checkIn->getReservationId()
+            << "\n"
+            << "Check-In Type    : Airport\n"
+            << "Check-In Date    : "
+            << checkIn->getCheckInDateTime()
+            << "\n";
+
+        if (boardingPass != nullptr)
+        {
+            std::cout
+                << "\n=====================================\n"
+                << "           Boarding Pass\n"
+                << "=====================================\n\n"
+
+                << "Boarding Pass ID : "
+                << boardingPass->getId()
+                << "\n"
+
+                << "Pass Number      : "
+                << boardingPass->getPassNumber()
+                << "\n"
+
+                << "Passenger        : "
+                << boardingPass->getPassengerName()
+                << "\n"
+
+                << "Passport         : "
+                << boardingPass->getPassportNumber()
+                << "\n"
+
+                << "Flight           : "
+                << boardingPass->getFlightNumber()
+                << "\n"
+
+                << "Seat             : "
+                << boardingPass->getSeatNumber()
+                << "\n"
+
+                << "Gate             : "
+                << boardingPass->getGate()
+                << "\n"
+
+                << "Boarding Time    : "
+                << boardingPass->getBoardingTime()
+                << "\n";
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cout
+            << "\nCheck-in failed: "
+            << e.what()
+            << "\n";
+    }
+
+    pause();
+}
+
+void ConsoleUI::managePassengers()
+{
+    while (true)
+    {
+        clearScreen();
+
+        std::cout
+            << "=====================================\n"
+            << "        Manage Passengers\n"
+            << "=====================================\n\n"
+            << "1. List Passengers\n"
+            << "2. View Passenger Profile\n"
+            << "3. Update Contact Information\n"
+            << "4. Set Passenger Preferences\n"
+            << "5. View Travel History\n"
+            << "6. Back\n\n"
+            << "Choose an option: ";
+
+        int choice;
+
+        if (!(std::cin >> choice))
+        {
+            std::cin.clear();
+
+            std::cin.ignore(
+                std::numeric_limits<std::streamsize>::max(),
+                '\n'
+            );
+
+            std::cout
+                << "\nInvalid input.\n";
+
+            pause();
+            continue;
+        }
+
+        std::cin.ignore(
+            std::numeric_limits<std::streamsize>::max(),
+            '\n'
+        );
+
+        switch (choice)
+        {
+            // =====================================
+            // 1. List Passengers
+            // =====================================
+            case 1:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "           List Passengers\n"
+                    << "=====================================\n\n";
+
+                bool foundPassenger = false;
+
+                for (const auto& user : users)
+                {
+                    auto passenger =
+                        std::dynamic_pointer_cast<Passenger>(user);
+
+                    if (passenger == nullptr)
+                    {
+                        continue;
+                    }
+
+                    foundPassenger = true;
+
+                    std::cout
+                        << "-------------------------------------\n"
+                        << "Passenger ID  : "
+                        << passenger->getId()
+                        << "\n"
+                        << "Name          : "
+                        << passenger->getFullName()
+                        << "\n"
+                        << "Username      : "
+                        << passenger->getUsername()
+                        << "\n"
+                        << "Email         : "
+                        << passenger->getEmail()
+                        << "\n"
+                        << "Phone         : "
+                        << passenger->getPhone()
+                        << "\n"
+                        << "Passport      : "
+                        << passenger->getPassportNumber()
+                        << "\n"
+                        << "Loyalty Points: "
+                        << passenger->getLoyaltyPoints()
+                        << "\n";
+                }
+
+                if (!foundPassenger)
+                {
+                    std::cout
+                        << "No passengers found.\n";
+                }
+                else
+                {
+                    std::cout
+                        << "-------------------------------------\n";
+                }
+
+                pause();
+                break;
+            }
+
+            // =====================================
+            // 2. View Passenger Profile
+            // =====================================
+            case 2:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "       View Passenger Profile\n"
+                    << "=====================================\n\n";
+
+                std::cout
+                    << "Available Passengers:\n\n";
+
+                bool foundPassenger = false;
+
+                for (const auto& user : users)
+                {
+                    auto passenger =
+                        std::dynamic_pointer_cast<Passenger>(user);
+
+                    if (passenger == nullptr)
+                    {
+                        continue;
+                    }
+
+                    foundPassenger = true;
+
+                    std::cout
+                        << "ID: "
+                        << passenger->getId()
+                        << " | Name: "
+                        << passenger->getFullName()
+                        << "\n";
+                }
+
+                if (!foundPassenger)
+                {
+                    std::cout
+                        << "\nNo passengers found.\n";
+
+                    pause();
+                    break;
+                }
+
+                int passengerId;
+
+                std::cout
+                    << "\nEnter Passenger ID: ";
+
+                if (!(std::cin >> passengerId))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid passenger ID.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                std::shared_ptr<Passenger> selectedPassenger;
+
+                for (const auto& user : users)
+                {
+                    auto passenger =
+                        std::dynamic_pointer_cast<Passenger>(user);
+
+                    if (passenger != nullptr &&
+                        passenger->getId() == passengerId)
+                    {
+                        selectedPassenger = passenger;
+                        break;
+                    }
+                }
+
+                if (selectedPassenger == nullptr)
+                {
+                    std::cout
+                        << "\nPassenger not found.\n";
+
+                    pause();
+                    break;
+                }
+
+                passengerService.displayProfile(
+                    selectedPassenger
+                );
+
+                pause();
+                break;
+            }
+
+            // =====================================
+            // 3. Update Contact Information
+            // =====================================
+            case 3:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "    Update Contact Information\n"
+                    << "=====================================\n\n";
+
+                int passengerId;
+
+                std::cout
+                    << "Enter Passenger ID: ";
+
+                if (!(std::cin >> passengerId))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid passenger ID.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                std::shared_ptr<Passenger> selectedPassenger;
+
+                for (const auto& user : users)
+                {
+                    auto passenger =
+                        std::dynamic_pointer_cast<Passenger>(user);
+
+                    if (passenger != nullptr &&
+                        passenger->getId() == passengerId)
+                    {
+                        selectedPassenger = passenger;
+                        break;
+                    }
+                }
+
+                if (selectedPassenger == nullptr)
+                {
+                    std::cout
+                        << "\nPassenger not found.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::string email;
+                std::string phone;
+
+                std::cout
+                    << "Current Email: "
+                    << selectedPassenger->getEmail()
+                    << "\n";
+
+                std::cout
+                    << "New Email: ";
+
+                std::getline(std::cin, email);
+
+                std::cout
+                    << "Current Phone: "
+                    << selectedPassenger->getPhone()
+                    << "\n";
+
+                std::cout
+                    << "New Phone: ";
+
+                std::getline(std::cin, phone);
+
+                try
+                {
+                    passengerService.updateContactInformation(
+                        selectedPassenger,
+                        email,
+                        phone
+                    );
+
+                    std::cout
+                        << "\nContact information updated successfully.\n";
+                }
+                catch (const std::exception& exception)
+                {
+                    std::cout
+                        << "\nUpdate failed: "
+                        << exception.what()
+                        << "\n";
+                }
+
+                pause();
+                break;
+            }
+
+            // =====================================
+            // 4. Set Passenger Preferences
+            // =====================================
+            case 4:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "       Passenger Preferences\n"
+                    << "=====================================\n\n";
+
+                int passengerId;
+
+                std::cout
+                    << "Enter Passenger ID: ";
+
+                if (!(std::cin >> passengerId))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid passenger ID.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                std::shared_ptr<Passenger> selectedPassenger;
+
+                for (const auto& user : users)
+                {
+                    auto passenger =
+                        std::dynamic_pointer_cast<Passenger>(user);
+
+                    if (passenger != nullptr &&
+                        passenger->getId() == passengerId)
+                    {
+                        selectedPassenger = passenger;
+                        break;
+                    }
+                }
+
+                if (selectedPassenger == nullptr)
+                {
+                    std::cout
+                        << "\nPassenger not found.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::string preferredSeat;
+                std::string mealPreference;
+
+                std::cout
+                    << "Current Preferred Seat: ";
+
+                if (selectedPassenger->getPreferredSeat().empty())
+                {
+                    std::cout << "Not set\n";
+                }
+                else
+                {
+                    std::cout
+                        << selectedPassenger->getPreferredSeat()
+                        << "\n";
+                }
+
+                std::cout
+                    << "New Preferred Seat: ";
+
+                std::getline(
+                    std::cin,
+                    preferredSeat
+                );
+
+                std::cout
+                    << "Current Meal Preference: ";
+
+                if (selectedPassenger->getMealPreference().empty())
+                {
+                    std::cout << "Not set\n";
+                }
+                else
+                {
+                    std::cout
+                        << selectedPassenger->getMealPreference()
+                        << "\n";
+                }
+
+                std::cout
+                    << "New Meal Preference: ";
+
+                std::getline(
+                    std::cin,
+                    mealPreference
+                );
+
+                try
+                {
+                    passengerService.setPreferences(
+                        selectedPassenger,
+                        preferredSeat,
+                        mealPreference
+                    );
+
+                    std::cout
+                        << "\nPassenger preferences updated successfully.\n";
+                }
+                catch (const std::exception& exception)
+                {
+                    std::cout
+                        << "\nUpdate failed: "
+                        << exception.what()
+                        << "\n";
+                }
+
+                pause();
+                break;
+            }
+
+            // =====================================
+            // 5. View Travel History
+            // =====================================
+            case 5:
+            {
+                clearScreen();
+
+                std::cout
+                    << "=====================================\n"
+                    << "         Travel History\n"
+                    << "=====================================\n\n";
+
+                int passengerId;
+
+                std::cout
+                    << "Enter Passenger ID: ";
+
+                if (!(std::cin >> passengerId))
+                {
+                    std::cin.clear();
+
+                    std::cin.ignore(
+                        std::numeric_limits<std::streamsize>::max(),
+                        '\n'
+                    );
+
+                    std::cout
+                        << "\nInvalid passenger ID.\n";
+
+                    pause();
+                    break;
+                }
+
+                std::cin.ignore(
+                    std::numeric_limits<std::streamsize>::max(),
+                    '\n'
+                );
+
+                std::shared_ptr<Passenger> selectedPassenger;
+
+                for (const auto& user : users)
+                {
+                    auto passenger =
+                        std::dynamic_pointer_cast<Passenger>(user);
+
+                    if (passenger != nullptr &&
+                        passenger->getId() == passengerId)
+                    {
+                        selectedPassenger = passenger;
+                        break;
+                    }
+                }
+
+                if (selectedPassenger == nullptr)
+                {
+                    std::cout
+                        << "\nPassenger not found.\n";
+
+                    pause();
+                    break;
+                }
+
+                try
+                {
+                    const auto& history =
+                        passengerService.getTravelHistory(
+                            selectedPassenger
+                        );
+
+                    if (history.empty())
+                    {
+                        std::cout
+                            << "\nNo travel history found.\n";
+                    }
+                    else
+                    {
+                        std::cout
+                            << "\nPassenger: "
+                            << selectedPassenger->getFullName()
+                            << "\n\n";
+
+                        for (const auto& flight : history)
+                        {
+                            if (flight == nullptr)
+                            {
+                                continue;
+                            }
+
+                            std::cout
+                                << "-------------------------------------\n"
+                                << "Flight Number : "
+                                << flight->getFlightNumber()
+                                << "\n"
+                                << "Origin        : "
+                                << flight->getOrigin()
+                                << "\n"
+                                << "Destination   : "
+                                << flight->getDestination()
+                                << "\n"
+                                << "Departure     : "
+                                << flight->getDepartureTime()
+                                << "\n"
+                                << "Arrival       : "
+                                << flight->getArrivalTime()
+                                << "\n"
+                                << "-------------------------------------\n";
+                        }
+                    }
+                }
+                catch (const std::exception& exception)
+                {
+                    std::cout
+                        << "\nFailed to retrieve travel history: "
+                        << exception.what()
+                        << "\n";
+                }
+
+                pause();
+                break;
+            }
+
+            // =====================================
+            // 6. Back
+            // =====================================
+            case 6:
+                return;
+
+            default:
+                std::cout
+                    << "\nInvalid option.\n";
+
+                pause();
+                break;
+        }
+    }
 }
 
 void ConsoleUI::processPayment()

@@ -56,5 +56,29 @@
         "phone": "01000000000",
         "role": "Administrator",
         "username": "medhat"
+    },
+    {
+        "email": "55",
+        "fullName": "5",
+        "id": 6,
+        "isActive": true,
+        "passwordHash": "bab703d727ae587cd5ee177af0f3e1413206924a864a6bff3c0785f32ad0b88e46947d74e0fed00f4b18008f2833a8ca0bd597abdb0d409ad3530d5d901b11ae:e9c616fe83da6915a1ab7a860b0d4ee64a74da1ddd6c74892bd5e7cc395ed2a8",
+        "phone": "5",
+        "role": "Administrator",
+        "username": "5"
+    },
+    {
+        "email": "pass@email.com",
+        "fullName": "pass pass",
+        "id": 7,
+        "isActive": true,
+        "loyaltyPoints": 0,
+        "mealPreference": "",
+        "passportNumber": "123123123",
+        "passwordHash": "f64e651a4dd6357bf48b4b620702589852673b17c1bf0ba737364abde9dcc28fe5511cacb98eef29a5220e68e67ab85fcf5f780958122d6e88c02e4afed97662:1d53998de0a33b46597b5ff5493e3d18e04fe9610e62e38fbcecbb6a47c595ae",
+        "phone": "01234567890",
+        "preferredSeat": "",
+        "role": "Passenger",
+        "username": "testpass"
     }
 ]

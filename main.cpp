@@ -12,6 +12,8 @@
 #include "services/PaymentService.h"
 #include "services/LoyaltyService.h"
 #include "services/BookingService.h"
+#include "services/PassengerService.h"
+#include "services/CheckInService.h"
 
 int main()
 {
@@ -32,19 +34,23 @@ int main()
 
         PaymentService paymentService;
         LoyaltyService loyaltyService;
+        PassengerService passengerService;
+        CheckInService checkInService;
 
         BookingService bookingService(
             paymentService,
             loyaltyService
         );
 
-    ConsoleUI consoleUI(
-        users,
-        authenticationService,
-        userManagementService,
-        std::move(maintenanceService),
-        bookingService
-    );
+        ConsoleUI consoleUI(
+            users,
+            authenticationService,
+            userManagementService,
+            std::move(maintenanceService),
+            bookingService,
+            passengerService,
+            checkInService
+        );
             consoleUI.run();
     }
     catch (const std::exception& e)
